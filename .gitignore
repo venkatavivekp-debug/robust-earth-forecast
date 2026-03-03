@@ -6,3 +6,4 @@ data_raw/
 data_processed/
 checkpoints/
 runs/
+lightning_logs/
