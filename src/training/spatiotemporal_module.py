@@ -5,6 +5,7 @@ import lightning as L
 from torch.utils.data import Dataset, DataLoader
 
 from src.models.cnn3d_forecaster import CNN3DForecaster
+from src.models.convlstm import ConvLSTMForecaster
 
 class NPZGridDataset(Dataset):
     def __init__(self, X, Y):
@@ -27,10 +28,16 @@ def make_loaders(npz_path: str, batch_size: int = 8, num_workers: int = 0):
     return train_loader, val_loader, meta
 
 class LitForecaster(L.LightningModule):
-    def __init__(self, t_in: int, in_channels: int, lr: float = 1e-3):
+    def __init__(self, model_name: str, t_in: int, in_channels: int, lr: float = 1e-3):
         super().__init__()
         self.save_hyperparameters()
-        self.model = CNN3DForecaster(in_channels=in_channels, t_in=t_in)
+
+        if model_name == "cnn3d":
+            self.model = CNN3DForecaster(in_channels=in_channels, t_in=t_in)
+        elif model_name == "convlstm":
+            self.model = ConvLSTMForecaster(in_channels=in_channels, hidden_channels=32, kernel_size=3)
+        else:
+            raise ValueError(f"Unknown model_name: {model_name}. Use cnn3d or convlstm.")
 
     def forward(self, x):
         return self.model(x)
