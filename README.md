@@ -1,20 +1,24 @@
 # Robust Earth Forecast
 
-Robust Earth Forecast is a deep learning research project focused on modeling and forecasting high-dimensional geospatial and environmental data. The goal of this project is to explore how modern deep learning architectures can learn complex spatial and temporal patterns from atmospheric datasets and remote sensing imagery.
+Robust Earth Forecast is an experimental deep learning project focused on modeling environmental and atmospheric data using modern spatiotemporal machine learning approaches.
 
-Environmental systems such as the atmosphere, ecosystems, and land surfaces produce large volumes of data from satellites, drones, and sensor networks. These datasets are inherently spatiotemporal and often contain multiple variables across vertical layers. Traditional forecasting approaches rely heavily on physics-based models, but deep learning provides an alternative data-driven approach that can capture complex nonlinear relationships directly from observations.
+The goal of the project is to explore how different neural network architectures can learn spatial and temporal patterns from climate datasets and remote sensing imagery. Environmental systems such as the atmosphere and land surface are highly dynamic, and understanding their interactions requires models that can process both spatial structure and temporal evolution.
 
-This project builds a unified machine learning pipeline that processes atmospheric reanalysis data and remote sensing imagery using deep neural networks. The atmospheric component uses ERA5 pressure-level datasets and trains spatiotemporal models such as ConvLSTM networks to forecast atmospheric variables across multiple pressure levels. The model learns spatial correlations across latitude and longitude as well as temporal dynamics across time steps, enabling it to model the three-dimensional structure of the atmosphere.
+This repository experiments with multiple modeling approaches applied to climate reanalysis data and satellite imagery. ERA5 atmospheric pressure-level data is used to study short-term forecasting of atmospheric variables, while satellite land-cover imagery is used to capture surface information that may influence environmental patterns.
 
-The repository also includes a remote sensing module designed for learning from satellite imagery. A convolutional neural network (CNN) model is implemented for land-cover classification using satellite image datasets such as EuroSAT. This module provides the foundation for extending the system to drone-based environmental sensing, where deep learning models can analyze aerial imagery to detect environmental patterns and changes.
+Several model architectures are explored throughout the project:
 
-The overall objective of this repository is to explore deep learning techniques for environmental monitoring and geospatial intelligence. Future work will expand the framework to include multimodal learning where atmospheric data, satellite imagery, and drone imagery can be combined within a single model. Possible extensions include spatiotemporal transformers, multimodal fusion networks, and large-scale training using multi-year atmospheric datasets.
+• **ConvLSTM models** for learning spatiotemporal patterns in atmospheric pressure-level data  
+• **3D CNN models** for volumetric climate forecasting tasks  
+• **Transformer-based models** to investigate attention mechanisms for temporal prediction  
+• **CNN models for remote sensing** to extract land-cover features from satellite imagery  
+• **Multimodal fusion models** that combine atmospheric data and satellite imagery to explore how surface characteristics might improve climate predictions
 
-This work aims to contribute toward building machine learning systems capable of understanding complex environmental dynamics using data from multiple sensing platforms.
+The broader objective is to experiment with integrating multiple environmental data sources into a unified learning framework. Real-world Earth system modeling often relies on combining atmospheric data, satellite observations, and temporal patterns, and this project explores how deep learning models can be structured to support that type of integration.
 
-Technologies used in this project include Python, PyTorch, PyTorch Lightning, NumPy, xarray, and ERA5 climate datasets.
+This project is primarily intended as a learning and research exploration of spatiotemporal deep learning for environmental systems, with a focus on climate modeling, geospatial data analysis, and multimodal machine learning approaches.
 
-Author:  
-Venkata Vivek Panguluri  
-M.S. Computer Science  
+Author:
+Venkata Vivek Panguluri
+M.S. Computer Science
 University of Georgia
