@@ -3,19 +3,15 @@ import torch.nn as nn
 
 
 class TransformerForecaster(nn.Module):
-    def __init__(self, in_channels, hidden_dim=64, nhead=4, num_layers=2):
+    def __init__(self, input_dim, model_dim=128, num_heads=4, num_layers=3):
         super().__init__()
 
-        self.spatial_encoder = nn.Sequential(
-            nn.Conv2d(in_channels, hidden_dim, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(hidden_dim, hidden_dim, 3, padding=1),
-            nn.ReLU(),
-        )
+        self.embedding = nn.Linear(input_dim, model_dim)
 
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_dim,
-            nhead=nhead,
+            d_model=model_dim,
+            nhead=num_heads,
+            dim_feedforward=256,
             batch_first=True
         )
 
@@ -24,27 +20,20 @@ class TransformerForecaster(nn.Module):
             num_layers=num_layers
         )
 
-        self.head = nn.Conv2d(hidden_dim, 1, 1)
+        self.head = nn.Linear(model_dim, input_dim)
 
     def forward(self, x):
-        # x shape: (B, T, H, W, C)
 
         B, T, H, W, C = x.shape
 
-        x = x.permute(0,1,4,2,3)   # B T C H W
-        x = x.reshape(B*T, C, H, W)
+        x = x.view(B, T, -1)
 
-        h = self.spatial_encoder(x)
+        x = self.embedding(x)
 
-        _, C2, H2, W2 = h.shape
-        h = h.reshape(B, T, C2, H2*W2).mean(-1)
+        x = self.transformer(x)
 
-        h = self.transformer(h)
+        x = x[:, -1]
 
-        h = h[:, -1]
+        out = self.head(x)
 
-        h = h.unsqueeze(-1).unsqueeze(-1).expand(-1, C2, H2, W2)
-
-        out = self.head(h)
-
-        return out.permute(0,2,3,1)
+        return out
