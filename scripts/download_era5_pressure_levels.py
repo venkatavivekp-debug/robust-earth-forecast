@@ -29,8 +29,10 @@ c.retrieve(
         "product_type": "reanalysis",
         "variable": VARS,
         "pressure_level": LEVELS,
-        "year": "2024",
-        "month": "01",
+
+	years = ["2022","2023","2024"]
+ 	months = ["01","02","03","04","05","06"]
+
 	"day": [f"{d:02d}" for d in range(1, 8)],
         "time": [f"{h:02d}:00" for h in range(0, 24)],
         "area": AREA,
