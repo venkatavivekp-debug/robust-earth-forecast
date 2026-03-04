@@ -35,6 +35,39 @@ F --> G
 G --> H[Climate Prediction Output]
 ```
 
+## Project Structure
+
+```
+robust-earth-forecast
+│
+├── src
+│   ├── models
+│   │   ├── convlstm.py
+│   │   ├── cnn3d_forecaster.py
+│   │   ├── transformer_forecaster.py
+│   │   └── multimodal_forecaster.py
+│   │
+│   └── remote_sensing
+│       └── cnn_landcover.py
+│
+├── scripts
+│   ├── train_pressure_levels.py
+│   ├── eval_pressure_levels.py
+│   └── train_multimodal.py
+│
+├── README.md
+├── requirements.txt
+└── .gitignore
+```
+
+## Future Work
+
+This project is an ongoing exploration of deep learning approaches for environmental modeling. Possible next steps include:
+
+• Incorporating higher-resolution satellite or drone imagery  
+• Experimenting with additional multimodal fusion strategies  
+• Evaluating transformer-based spatiotemporal models on climate data  
+• Investigating uncertainty-aware prediction for environmental forecasting
 
 Author:
 Venkata Vivek Panguluri
