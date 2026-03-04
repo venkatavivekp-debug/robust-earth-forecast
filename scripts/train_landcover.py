@@ -5,6 +5,8 @@ from torchvision import datasets, transforms
 
 from src.remote_sensing.cnn_landcover import LandCoverCNN
 
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
 transform = transforms.Compose([
     transforms.Resize((64,64)),
     transforms.ToTensor()
@@ -16,21 +18,30 @@ dataset = datasets.EuroSAT(
     transform=transform
 )
 
-loader = DataLoader(dataset,batch_size=32,shuffle=True)
+loader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-model = LandCoverCNN()
-optimizer = torch.optim.Adam(model.parameters(),lr=1e-3)
+model = LandCoverCNN().to(device)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss_fn = nn.CrossEntropyLoss()
 
 for epoch in range(5):
 
-    for x,y in loader:
+    running_loss = 0
+
+    for x, y in loader:
+
+        x = x.to(device)
+        y = y.to(device)
 
         yhat = model(x)
-        loss = loss_fn(yhat,y)
+
+        loss = loss_fn(yhat, y)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-    print("epoch",epoch,"loss",loss.item())
+        running_loss += loss.item()
+
+    print(f"Epoch {epoch} Loss {running_loss/len(loader)}")
