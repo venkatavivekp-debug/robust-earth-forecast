@@ -18,6 +18,24 @@ The broader objective is to experiment with integrating multiple environmental d
 
 This project is primarily intended as a learning and research exploration of spatiotemporal deep learning for environmental systems, with a focus on climate modeling, geospatial data analysis, and multimodal machine learning approaches.
 
+## Model Architecture
+
+```mermaid
+flowchart TD
+
+A[Satellite / Drone Images] --> B[LandCover CNN]
+B --> C[Surface Feature Vector]
+
+D[ERA5 Atmospheric Data] --> E[ConvLSTM / Transformer]
+E --> F[Temporal Climate Features]
+
+C --> G[Fusion Layer]
+F --> G
+
+G --> H[Climate Prediction Output]
+```
+
+
 Author:
 Venkata Vivek Panguluri
 M.S. Computer Science
