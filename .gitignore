@@ -1,9 +1,19 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
+
+# Mac system files
 .DS_Store
-data_raw/
-data_processed/
+
+# Training outputs
 checkpoints/
 runs/
 lightning_logs/
+
+# Data (do not track large datasets)
+data_raw/
+data_processed/
+
+# Jupyter
+.ipynb_checkpoints/
