@@ -59,6 +59,22 @@ robust-earth-forecast
 ├── requirements.txt
 └── .gitignore
 ```
+## Climate Forecasting Demo Notebook
+
+A demonstration notebook showing spatiotemporal climate forecasting using ERA5 atmospheric data and deep learning models.
+
+The notebook includes:
+
+- Loading processed ERA5 atmospheric pressure-level data
+- Visualizing atmospheric input fields
+- Loading a trained ConvLSTM forecasting model
+- Running inference on atmospheric sequences
+- Visualizing predicted atmospheric fields
+- Comparing input fields with model forecasts
+
+Notebook location:
+
+notebooks/climate_forecasting_demo.ipynb
 
 ## Future Work
 
