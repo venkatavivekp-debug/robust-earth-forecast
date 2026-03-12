@@ -104,7 +104,8 @@ C --> G[Fusion Layer]
 F --> G
 
 G --> H[Climate Prediction Output]
-Author:
+```
+
 Venkata Vivek Panguluri
 M.S. Computer Science
 University of Georgia
