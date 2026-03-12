@@ -106,6 +106,10 @@ F --> G
 G --> H[Climate Prediction Output]
 ```
 
-Venkata Vivek Panguluri
-M.S. Computer Science
+---
+
+## Author
+
+Venkata Vivek Panguluri  
+M.S. Computer Science  
 University of Georgia
