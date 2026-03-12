@@ -1,5 +1,6 @@
 import torch
 import xarray as xr
+import numpy as np
 
 class ClimateDataset(torch.utils.data.Dataset):
 
@@ -8,8 +9,13 @@ class ClimateDataset(torch.utils.data.Dataset):
         ds = xr.open_dataset(file)
 
         temp = ds["t2m"].values
+        uwind = ds["u10"].values
+        vwind = ds["v10"].values
+        pressure = ds["sp"].values
 
-        self.data = torch.tensor(temp).float()
+        stacked = np.stack([temp, uwind, vwind, pressure], axis=1)
+
+        self.data = torch.tensor(stacked).float()
 
     def __len__(self):
 
@@ -19,4 +25,4 @@ class ClimateDataset(torch.utils.data.Dataset):
 
         x = self.data[idx]
 
-        return x.unsqueeze(0)
+        return x
