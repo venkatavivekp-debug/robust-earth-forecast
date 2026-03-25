@@ -1,104 +1,73 @@
 # Robust Earth Forecast
 
-Robust Earth Forecast is a research-oriented deep learning project for climate downscaling, forecasting, and environmental data modeling.
+Robust Earth Forecast is a research-oriented deep learning project for climate downscaling and environmental prediction.
 
-The project focuses on learning spatial and temporal patterns from atmospheric datasets such as ERA5 and using modern neural network architectures to build climate prediction systems. The long-term goal is to study how coarse-resolution climate data can be transformed into more useful high-resolution regional predictions, with a particular focus on downscaling workflows such as ERA5 to PRISM.
-
-This repository is being developed as a structured climate AI project with reproducible data pipelines, deep learning models, evaluation code, and visualization tools.
+The goal is to learn how coarse-resolution atmospheric data (ERA5) can be transformed into high-resolution regional predictions (PRISM) using deep learning.
 
 ---
 
 ## Research Motivation
 
-Large-scale climate and weather datasets often provide information at coarse spatial resolution.  
-For regional analysis and decision-making, these outputs need to be translated into finer spatial detail.
+Climate datasets are often low-resolution, which limits regional analysis.
 
-A typical downscaling workflow looks like this:
+This project explores learning a mapping:
 
-ERA5 (coarse-resolution climate data)  
-↓  
-Deep learning model  
-↓  
-High-resolution regional climate prediction
-
-This project explores how deep learning architectures can be used for that task while also supporting broader climate forecasting experiments.
+ERA5 (low resolution) → Deep Learning Model → High-resolution prediction
 
 ---
 
-## Current Project Goals
+## Current Goals
 
-The current goals of the project are:
-
-- build a clean and reproducible ERA5 climate data pipeline
-- prepare datasets for climate downscaling experiments
-- implement baseline and advanced deep learning models
-- evaluate model performance with scientific metrics
-- generate climate maps and visualizations
-- gradually move toward transformer-based climate architectures inspired by modern foundation models such as Prithvi WxC
+- Build a clean ERA5 data pipeline  
+- Prepare datasets for downscaling  
+- Train deep learning models  
+- Evaluate predictions  
+- Visualize climate outputs  
 
 ---
 
 ## Datasets
 
-### ERA5 Reanalysis Data
-ERA5 is used as the primary atmospheric dataset in this project. It provides large-scale climate and weather variables and serves as the coarse-resolution source for downscaling experiments.
+### ERA5
+- Global atmospheric reanalysis dataset  
+- Used as input (low resolution)
 
-### PRISM Climate Data
-PRISM is intended as the high-resolution target dataset for regional climate downscaling experiments.
+### PRISM
+- High-resolution climate dataset  
+- Used as ground truth
 
-### Initial Regional Focus
-The first practice task for this project is:
-
-**Downscaling surface temperature for Georgia**
+### Region
+- Georgia (initial experiments)
 
 ---
 
-## Current Models Implemented
+## Models
 
-The repository is structured to support multiple model families for climate AI experiments.
+### CNN Downscaler
+- Learns spatial mapping (ERA5 → PRISM)
 
-### 1. CNN Downscaler
-A baseline convolutional neural network for spatial climate downscaling.
+### ConvLSTM
+- Captures temporal climate patterns
 
-Purpose:
-- learn a mapping from coarse-resolution climate grids to higher-resolution outputs
-- establish a strong baseline before moving to transformer-based models
-
-### 2. ConvLSTM Forecaster
-A spatiotemporal model for learning atmospheric dynamics over time.
-
-Purpose:
-- model temporal evolution of weather fields
-- support future forecasting experiments using sequential climate data
-
-### 3. Transformer Downscaler
-A transformer-based model for spatial climate modeling.
-
-Purpose:
-- explore patch-based climate representations
-- move toward architecture ideas used in modern AI weather models
-
-### 4. Remote Sensing CNN Modules
-Earlier project work includes CNN modules for land-cover and remote sensing imagery.
-
-Purpose:
-- study how surface information may help environmental prediction
-- support future multimodal climate experiments
+### Transformer (planned)
+- For advanced climate modeling
 
 ---
 
 ## Model Architecture
 
-The long-term architecture direction of the project combines atmospheric data, temporal learning, and potentially surface information from imagery.
-
 ```mermaid
 flowchart TD
 
+subgraph Surface Data
 A[Satellite or Drone Images] --> B[Land Cover CNN]
 B --> C[Surface Feature Vector]
+end
 
+subgraph Atmospheric Data
 D[ERA5 Atmospheric Data] --> E[ConvLSTM or Transformer]
 E --> F[Temporal Climate Features]
+end
 
 C --> G[Fusion Layer]
 F --> G
@@ -106,7 +75,23 @@ F --> G
 G --> H[Climate Prediction Output]
 ```
 
----
+## Conclusion
+
+This project demonstrates how deep learning can be used to enhance the spatial resolution of climate data.
+
+The CNN-based downscaling approach successfully learns spatial patterns from ERA5 inputs and produces outputs that resemble high-resolution PRISM data.
+
+This serves as a strong baseline for further research in climate AI and spatiotemporal modeling.
+
+
+
+## Future Work
+
+- Improve model accuracy with deeper architectures (UNet, ResNet)
+- Incorporate temporal models (ConvLSTM, Transformers)
+- Extend to multi-variable climate prediction
+- Add larger datasets and longer time ranges
+- Explore foundation models for climate (e.g., transformer-based approaches)
 
 ## Author
 
