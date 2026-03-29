@@ -30,4 +30,7 @@ lightning_logs/
 runs/
 
 # Generated evaluation outputs
-results/evaluation/
+results/evaluation/*
+!results/evaluation/
+!results/evaluation/comparison_1_20230101.png
+!results/evaluation/metrics.json

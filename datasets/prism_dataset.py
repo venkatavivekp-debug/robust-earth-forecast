@@ -52,6 +52,7 @@ class ERA5_PRISM_Dataset(Dataset):
         if not self.era5_path.exists():
             raise FileNotFoundError(f"ERA5 file not found: {self.era5_path}")
 
+        # Convert hourly ERA5 into daily fields used for date-wise pairing.
         self.era5_daily = self._load_era5_daily(self.era5_path, era5_variable)
         self.era5_dates = pd.to_datetime(self.era5_daily["time"].values).normalize()
         self.era5_date_set = set(self.era5_dates)
@@ -61,6 +62,7 @@ class ERA5_PRISM_Dataset(Dataset):
         self._samples: List[Tuple[np.ndarray, np.ndarray, pd.Timestamp, Path]] = []
         parsed_prism_dates: List[pd.Timestamp] = []
 
+        # First valid PRISM raster defines the target grid for all following dates.
         template_raster = None
         for prism_file in prism_files:
             sample_date = self._parse_date_from_filename(prism_file)
@@ -261,6 +263,7 @@ class ERA5_PRISM_Dataset(Dataset):
     def _prepare_prism_values(self, prism_array: np.ndarray) -> np.ndarray:
         prism_array = self._fill_missing(prism_array)
 
+        # Some PRISM sources store temperatures in hundredths of degrees C.
         if self.auto_scale_prism:
             p95 = float(np.percentile(np.abs(prism_array), 95))
             if p95 > 500.0:

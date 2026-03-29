@@ -75,6 +75,7 @@ def split_dataset(dataset: ERA5_PRISM_Dataset, val_fraction: float) -> Tuple[Sub
         val_size = n_total - 1
 
     train_size = n_total - val_size
+    # Simple chronological split keeps this baseline deterministic and easy to reproduce.
     train_indices = list(range(train_size))
     val_indices = list(range(train_size, n_total))
     return Subset(dataset, train_indices), Subset(dataset, val_indices)
@@ -128,6 +129,7 @@ def main() -> None:
         era5_path=str(era5_path),
         prism_path=str(prism_path),
     )
+    # Train/validation split happens after ERA5/PRISM temporal alignment.
     train_set, val_set = split_dataset(dataset, args.val_fraction)
 
     train_loader = DataLoader(
@@ -167,6 +169,7 @@ def main() -> None:
         improved = val_loss < best_val_loss
         if improved:
             best_val_loss = val_loss
+            # Save only the best validation checkpoint for clean demo reproducibility.
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
