@@ -18,3 +18,12 @@ data_processed/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# ignore models and outputs
+*.pth
+*.png
+*.jpg
+checkpoints/
+results/
+data_raw/
+data_processed/
