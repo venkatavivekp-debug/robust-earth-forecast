@@ -93,7 +93,7 @@ Open:
 jupyter notebook notebooks/climate_forecasting_demo.ipynb
 ```
 
-The notebook is the professor-facing walkthrough of:
+The notebook is the walkthrough of:
 - ERA5 vs PRISM data framing
 - baseline CNN model setup
 - inference and visualization
