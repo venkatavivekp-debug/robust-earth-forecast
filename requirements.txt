@@ -3,17 +3,13 @@ pandas
 matplotlib
 xarray
 netcdf4
-h5netcdf
-zarr
-fsspec
-scipy
+rioxarray
+rasterio
 
 torch
 lightning
 
-streamlit
-
 tqdm
-pyyaml
-
+requests
 cdsapi
+jupyter

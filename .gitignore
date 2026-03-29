@@ -10,11 +10,19 @@ __pycache__/
 checkpoints/
 runs/
 lightning_logs/
+*.pt
+*.pth
 
 # Data (do not track large datasets)
 data/
 data_raw/
 data_processed/
+*.nc
+*.bil
+*.tif
+*.tiff
+*.asc
+*.zip
 
 # Jupyter
 .ipynb_checkpoints/

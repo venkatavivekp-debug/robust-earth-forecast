@@ -1,100 +1,171 @@
 # Robust Earth Forecast
 
-Robust Earth Forecast is a research-oriented deep learning project for climate downscaling and environmental prediction.
+A compact, professor-facing mini research prototype for **Georgia surface temperature downscaling**:
 
-The goal is to learn how coarse-resolution atmospheric data (ERA5) can be transformed into high-resolution regional predictions (PRISM) using deep learning.
-
----
+- **Input**: ERA5 coarse-resolution temperature (NetCDF)
+- **Target**: PRISM higher-resolution temperature rasters
+- **Model**: CNN baseline for spatial downscaling
+- **Showcase**: notebook-first workflow with reproducible training/evaluation scripts
 
 ## Research Motivation
 
-Climate datasets are often low-resolution, which limits regional analysis.
+Regional climate analysis often needs finer spatial detail than global reanalysis products provide. This project studies a practical baseline mapping:
 
-This project explores learning a mapping:
+**ERA5 (coarse) -> CNN downscaler -> PRISM-like high-resolution temperature**
 
-ERA5 (low resolution) → Deep Learning Model → High-resolution prediction
+The objective is to establish a clean first research pipeline before moving to more advanced spatiotemporal/transformer approaches.
 
----
+## Current Scope
 
-## Current Goals
+This repository currently focuses on:
 
-- Build a clean ERA5 data pipeline  
-- Prepare datasets for downscaling  
-- Train deep learning models  
-- Evaluate predictions  
-- Visualize climate outputs  
+- Georgia-only prototype
+- Daily temperature downscaling baseline
+- ERA5-to-PRISM data alignment
+- Compact CNN training/evaluation
+- Notebook-based result presentation
 
----
+This is intentionally a baseline, not a production climate system.
 
-## Datasets
+## Repository Structure
 
-### ERA5
-- Global atmospheric reanalysis dataset  
-- Used as input (low resolution)
-
-### PRISM
-- High-resolution climate dataset  
-- Used as ground truth
-
-### Region
-- Georgia (initial experiments)
-
----
-
-## Models
-
-### CNN Downscaler
-- Learns spatial mapping (ERA5 → PRISM)
-
-### ConvLSTM
-- Captures temporal climate patterns
-
-### Transformer (planned)
-- For advanced climate modeling
-
----
-
-## Model Architecture
-
-```mermaid
-flowchart TD
-
-subgraph Surface Data
-A[Satellite or Drone Images] --> B[Land Cover CNN]
-B --> C[Surface Feature Vector]
-end
-
-subgraph Atmospheric Data
-D[ERA5 Atmospheric Data] --> E[ConvLSTM or Transformer]
-E --> F[Temporal Climate Features]
-end
-
-C --> G[Fusion Layer]
-F --> G
-
-G --> H[Climate Prediction Output]
+```text
+robust-earth-forecast/
+├── data_pipeline/
+│   ├── download_era5_georgia.py
+│   ├── download_prism.py
+│   └── validate_prism.py
+├── datasets/
+│   └── prism_dataset.py
+├── models/
+│   └── cnn_downscaler.py
+├── training/
+│   └── train_downscaler.py
+├── evaluation/
+│   └── evaluate_model.py
+├── notebooks/
+│   └── climate_forecasting_demo.ipynb
+├── data_raw/                # local data only (not committed)
+├── checkpoints/             # local model checkpoints (ignored)
+└── results/                 # evaluation outputs (ignored)
 ```
 
-## Conclusion
+## Setup
 
-This project demonstrates how deep learning can be used to enhance the spatial resolution of climate data.
+From project root:
 
-The CNN-based downscaling approach successfully learns spatial patterns from ERA5 inputs and produces outputs that resemble high-resolution PRISM data.
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-This serves as a strong baseline for further research in climate AI and spatiotemporal modeling.
+## Data Placement and Validation
 
+Do not commit large raw datasets. Keep local files under `data_raw/`.
 
+Expected baseline layout:
 
-## Future Work
+```text
+data_raw/
+├── era5_georgia_temp.nc
+└── prism/
+    ├── PRISM_tmean_stable_4kmD1_20230101_bil.bil
+    ├── PRISM_tmean_stable_4kmD1_20230102_bil.bil
+    └── ...
+```
 
-- Improve model accuracy with deeper architectures (UNet, ResNet)
-- Incorporate temporal models (ConvLSTM, Transformers)
-- Extend to multi-variable climate prediction
-- Add larger datasets and longer time ranges
-- Explore foundation models for climate (e.g., transformer-based approaches)
+Supported PRISM raster types for this baseline: `.bil`, `.tif`, `.tiff`, `.asc`.
+PRISM filenames must include `YYYYMMDD` (for ERA5/PRISM date pairing).
+
+Validate PRISM files:
+
+```bash
+python3 data_pipeline/validate_prism.py --path data_raw/prism
+```
+
+If you have zipped PRISM downloads:
+
+```bash
+python3 data_pipeline/validate_prism.py \
+  --path data_raw/prism/PRISM_tmean_stable_4kmD1_20230101_bil.zip \
+  --extract-dir data_raw/prism
+```
+
+Optional conversion from BIL to GeoTIFF:
+
+```bash
+python3 data_pipeline/validate_prism.py \
+  --path data_raw/prism \
+  --convert-bil-to-geotiff \
+  --geotiff-dir data_raw/prism/geotiff
+```
+
+## Training (from Project Root)
+
+```bash
+python3 training/train_downscaler.py \
+  --era5-path data_raw/era5_georgia_temp.nc \
+  --prism-path data_raw/prism \
+  --epochs 20 \
+  --batch-size 4 \
+  --learning-rate 1e-3 \
+  --device auto \
+  --checkpoint-out checkpoints/cnn_downscaler_best.pt
+```
+
+## Evaluation (from Project Root)
+
+```bash
+python3 evaluation/evaluate_model.py \
+  --era5-path data_raw/era5_georgia_temp.nc \
+  --prism-path data_raw/prism \
+  --checkpoint-path checkpoints/cnn_downscaler_best.pt \
+  --num-samples 8 \
+  --num-plots 1 \
+  --results-dir results/evaluation
+```
+
+Outputs:
+
+- `results/evaluation/metrics.json` (RMSE, MAE)
+- `results/evaluation/comparison_*.png` (ERA5 input, prediction, PRISM target)
+
+## Notebook Showcase
+
+Open the main presentation notebook:
+
+```bash
+jupyter notebook notebooks/climate_forecasting_demo.ipynb
+```
+
+The notebook demonstrates:
+
+- motivation and problem framing
+- ERA5/PRISM loading and shape checks
+- trained model loading
+- prediction and visual comparison
+- brief conclusion and future research direction
+
+## Current Results Summary
+
+The baseline provides:
+
+- reproducible ERA5-PRISM alignment
+- a working CNN downscaler training loop
+- standardized evaluation with RMSE/MAE and comparison plots
+
+Exact metric values depend on local PRISM coverage, date range, and training settings.
+
+## Next Research Step (Prithvi WxC Direction)
+
+This baseline is the foundation for moving toward Prithvi WxC-style research:
+
+- longer temporal context and spatiotemporal modeling
+- multi-variable atmospheric conditioning
+- transformer-based geospatial token modeling
+- Lightning-based experiment management for larger runs
 
 ## Author
 
-Venkata Vivek Panguluri  
-M.S. Computer Science  
-University of Georgia
+Venkata Vivek Panguluri

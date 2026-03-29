@@ -1,47 +1,184 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import sys
+from typing import Tuple
+
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from datasets.prism_dataset import ERA5_PRISM_Dataset
 from models.cnn_downscaler import CNNDownscaler
 
 
-dataset = ERA5_PRISM_Dataset(
-    era5_path="data_raw/era5_georgia_temp.nc",
-    prism_path="data_raw/prism/prism_tmean_2023.nc"
-)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train ERA5->PRISM CNN downscaler baseline")
+    parser.add_argument("--era5-path", type=str, required=True, help="Path to ERA5 NetCDF file")
+    parser.add_argument(
+        "--prism-path",
+        type=str,
+        required=True,
+        help="Path to PRISM raster file or directory of daily rasters",
+    )
+    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--val-fraction", type=float, default=0.2)
+    parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda", "mps"],
+        help="Training device",
+    )
+    parser.add_argument(
+        "--checkpoint-out",
+        type=str,
+        default="checkpoints/cnn_downscaler_best.pt",
+        help="Output path for best model checkpoint",
+    )
+    return parser.parse_args()
 
-loader = DataLoader(dataset, batch_size=8, shuffle=True)
+
+def resolve_device(device_arg: str) -> torch.device:
+    if device_arg == "cuda":
+        return torch.device("cuda")
+    if device_arg == "mps":
+        return torch.device("mps")
+    if device_arg == "cpu":
+        return torch.device("cpu")
+
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
-model = CNNDownscaler()
+def split_dataset(dataset: ERA5_PRISM_Dataset, val_fraction: float) -> Tuple[Subset, Subset]:
+    if not 0.0 < val_fraction < 1.0:
+        raise ValueError("val_fraction must be between 0 and 1")
+
+    n_total = len(dataset)
+    if n_total < 2:
+        raise ValueError("At least 2 aligned samples are required for train/validation split")
+
+    val_size = max(1, int(round(n_total * val_fraction)))
+    if val_size >= n_total:
+        val_size = n_total - 1
+
+    train_size = n_total - val_size
+    train_indices = list(range(train_size))
+    val_indices = list(range(train_size, n_total))
+    return Subset(dataset, train_indices), Subset(dataset, val_indices)
 
 
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-loss_fn = nn.MSELoss()
-
-
-for epoch in range(10):
-    total_loss = 0
+def run_epoch(
+    model: CNNDownscaler,
+    loader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    train: bool,
+) -> float:
+    model.train(mode=train)
+    running_loss = 0.0
 
     for x, y in loader:
-        optimizer.zero_grad()
+        x = x.to(device)
+        y = y.to(device)
 
-        preds = model(x)
+        with torch.set_grad_enabled(train):
+            preds = model(x, target_size=(y.shape[-2], y.shape[-1]))
+            loss = criterion(preds, y)
 
-        # match size
-        preds = torch.nn.functional.interpolate(preds, size=y.shape[-2:])
+            if train:
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-        loss = loss_fn(preds, y)
+        running_loss += float(loss.item())
 
-        loss.backward()
-        optimizer.step()
-
-        total_loss += loss.item()
-
-    print(f"Epoch {epoch} Loss: {total_loss/len(loader):.6f}")
+    return running_loss / max(1, len(loader))
 
 
-torch.save(model.state_dict(), "model.pth")
-print("Model saved!")
+def main() -> None:
+    args = parse_args()
+    device = resolve_device(args.device)
+
+    dataset = ERA5_PRISM_Dataset(
+        era5_path=args.era5_path,
+        prism_path=args.prism_path,
+    )
+    train_set, val_set = split_dataset(dataset, args.val_fraction)
+
+    train_loader = DataLoader(
+        train_set,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+    )
+    val_loader = DataLoader(
+        val_set,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+    )
+
+    sample_x, sample_y = dataset[0]
+    model = CNNDownscaler(in_channels=sample_x.shape[0], out_channels=sample_y.shape[0]).to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    criterion = nn.MSELoss()
+
+    checkpoint_path = Path(args.checkpoint_out)
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
+    best_val_loss = float("inf")
+
+    print(
+        f"Dataset: total={len(dataset)} train={len(train_set)} val={len(val_set)} "
+        f"input_shape={tuple(sample_x.shape)} target_shape={tuple(sample_y.shape)}"
+    )
+    print(f"Device: {device.type}")
+
+    for epoch in range(1, args.epochs + 1):
+        train_loss = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
+        val_loss = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
+
+        improved = val_loss < best_val_loss
+        if improved:
+            best_val_loss = val_loss
+            torch.save(
+                {
+                    "model_state_dict": model.state_dict(),
+                    "model_config": {
+                        "in_channels": sample_x.shape[0],
+                        "out_channels": sample_y.shape[0],
+                        "base_channels": 32,
+                    },
+                    "epoch": epoch,
+                    "best_val_loss": best_val_loss,
+                    "args": vars(args),
+                },
+                checkpoint_path,
+            )
+
+        marker = "*" if improved else ""
+        print(
+            f"Epoch {epoch:03d}/{args.epochs:03d} "
+            f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} {marker}"
+        )
+
+    print(f"Best checkpoint saved to: {checkpoint_path} (val_loss={best_val_loss:.6f})")
+
+
+if __name__ == "__main__":
+    main()
