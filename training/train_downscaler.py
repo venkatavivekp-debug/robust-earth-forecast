@@ -8,7 +8,8 @@ from models.cnn_downscaler import CNNDownscaler
 
 
 dataset = ERA5_PRISM_Dataset(
-    "data_raw/era5_georgia_temp.nc"
+    era5_path="data_raw/era5_georgia_temp.nc",
+    prism_path="data_raw/prism/prism_tmean_2023.nc"
 )
 
 loader = DataLoader(dataset, batch_size=8, shuffle=True)
