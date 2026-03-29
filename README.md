@@ -101,6 +101,21 @@ python3 data_pipeline/validate_prism.py \
   --geotiff-dir data_raw/prism/geotiff
 ```
 
+## Quick Demo (Without Full Data)
+
+If ERA5 and PRISM files are not available yet, the training/evaluation scripts still run and fail with clear, actionable error messages.
+
+To run the full pipeline:
+
+1. Download ERA5 data and place it under `data_raw/` (for example `data_raw/era5_georgia_temp.nc`).
+2. Download/extract PRISM rasters and place them under `data_raw/prism/`.
+3. Run training and evaluation commands from this README.
+
+Expected outputs after a full run:
+
+- RMSE and MAE metrics (saved in `results/evaluation/metrics.json`)
+- Prediction vs ground-truth comparison plots (saved in `results/evaluation/`)
+
 ## Training (from Project Root)
 
 ```bash
