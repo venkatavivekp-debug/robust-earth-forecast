@@ -113,9 +113,20 @@ def main() -> None:
     args = parse_args()
     device = resolve_device(args.device)
 
+    era5_path = Path(args.era5_path)
+    prism_path = Path(args.prism_path)
+    if not era5_path.exists():
+        raise FileNotFoundError(
+            f"ERA5 file not found: {era5_path}. Run data_pipeline/download_era5_georgia.py first."
+        )
+    if not prism_path.exists():
+        raise FileNotFoundError(
+            f"PRISM path not found: {prism_path}. Run data_pipeline/download_prism.py first."
+        )
+
     dataset = ERA5_PRISM_Dataset(
-        era5_path=args.era5_path,
-        prism_path=args.prism_path,
+        era5_path=str(era5_path),
+        prism_path=str(prism_path),
     )
     train_set, val_set = split_dataset(dataset, args.val_fraction)
 

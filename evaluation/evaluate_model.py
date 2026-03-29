@@ -24,6 +24,7 @@ def _configure_plot_cache() -> None:
     cache_root = PROJECT_ROOT / ".cache"
     cache_root.mkdir(parents=True, exist_ok=True)
 
+    os.environ.setdefault("MPLBACKEND", "Agg")
     os.environ.setdefault("XDG_CACHE_HOME", str(cache_root))
     os.environ.setdefault("MPLCONFIGDIR", str(cache_root / "matplotlib"))
 
@@ -147,11 +148,23 @@ def main() -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
 
     device = resolve_device(args.device)
+    era5_path = Path(args.era5_path)
+    prism_path = Path(args.prism_path)
     checkpoint_path = Path(args.checkpoint_path)
+    if not era5_path.exists():
+        raise FileNotFoundError(
+            f"ERA5 file not found: {era5_path}. Run data_pipeline/download_era5_georgia.py first."
+        )
+    if not prism_path.exists():
+        raise FileNotFoundError(
+            f"PRISM path not found: {prism_path}. Run data_pipeline/download_prism.py first."
+        )
     if not checkpoint_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+        raise FileNotFoundError(
+            f"Checkpoint not found: {checkpoint_path}. Run training/train_downscaler.py first."
+        )
 
-    dataset = ERA5_PRISM_Dataset(args.era5_path, args.prism_path)
+    dataset = ERA5_PRISM_Dataset(str(era5_path), str(prism_path))
     n_eval = min(args.num_samples, len(dataset))
 
     if n_eval < 1:

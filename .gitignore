@@ -1,20 +1,17 @@
-# Python
+# Python and virtual env
 .venv/
 __pycache__/
 *.pyc
+
+# Local caches
 .cache/
+.pytest_cache/
 
-# Mac system files
+# OS/Jupyter
 .DS_Store
+.ipynb_checkpoints/
 
-# Training outputs
-checkpoints/
-runs/
-lightning_logs/
-*.pt
-*.pth
-
-# Data (do not track large datasets)
+# Data and large scientific artifacts
 data/
 data_raw/
 data_processed/
@@ -25,14 +22,12 @@ data_processed/
 *.asc
 *.zip
 
-# Jupyter
-.ipynb_checkpoints/
-
-# ignore models and outputs
-*.pth
-*.png
-*.jpg
+# Model outputs
 checkpoints/
-results/
-data_raw/
-data_processed/
+*.pt
+*.pth
+lightning_logs/
+runs/
+
+# Generated evaluation outputs
+results/evaluation/

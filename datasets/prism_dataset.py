@@ -59,6 +59,7 @@ class ERA5_PRISM_Dataset(Dataset):
 
         prism_files = self._resolve_prism_files(self.prism_path)
         self._samples: List[Tuple[np.ndarray, np.ndarray, pd.Timestamp, Path]] = []
+        parsed_prism_dates: List[pd.Timestamp] = []
 
         template_raster = None
         for prism_file in prism_files:
@@ -67,6 +68,7 @@ class ERA5_PRISM_Dataset(Dataset):
                 raise ValueError(
                     f"Could not parse YYYYMMDD date from PRISM file name: {prism_file.name}"
                 )
+            parsed_prism_dates.append(sample_date)
 
             if sample_date not in self.era5_date_set:
                 continue
@@ -90,9 +92,14 @@ class ERA5_PRISM_Dataset(Dataset):
             self._samples.append((era5_array, prism_array, sample_date, prism_file))
 
         if not self._samples:
+            era5_start = self.era5_dates.min().strftime("%Y-%m-%d")
+            era5_end = self.era5_dates.max().strftime("%Y-%m-%d")
+            prism_preview = ", ".join(sorted({d.strftime("%Y-%m-%d") for d in parsed_prism_dates})[:5])
             raise RuntimeError(
                 "No aligned ERA5/PRISM pairs were created. "
-                "Check that PRISM file names include YYYYMMDD and overlap ERA5 dates."
+                f"ERA5 date range: {era5_start} to {era5_end}. "
+                f"First PRISM dates found: {prism_preview or 'none'}. "
+                "Check PRISM filenames/dates and temporal overlap."
             )
 
     def __len__(self) -> int:
