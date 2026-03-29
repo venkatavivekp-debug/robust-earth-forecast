@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Dict, List
@@ -17,6 +18,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from datasets.prism_dataset import ERA5_PRISM_Dataset
 from models.cnn_downscaler import CNNDownscaler
+
+
+def _configure_plot_cache() -> None:
+    cache_root = PROJECT_ROOT / ".cache"
+    cache_root.mkdir(parents=True, exist_ok=True)
+
+    os.environ.setdefault("XDG_CACHE_HOME", str(cache_root))
+    os.environ.setdefault("MPLCONFIGDIR", str(cache_root / "matplotlib"))
 
 
 def parse_args() -> argparse.Namespace:
@@ -94,6 +103,7 @@ def save_comparison_plot(
     output_path: Path,
     title: str,
 ) -> None:
+    _configure_plot_cache()
     import matplotlib.pyplot as plt
 
     era5_up = F.interpolate(

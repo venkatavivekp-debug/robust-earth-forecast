@@ -60,6 +60,39 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Automatic PRISM + ERA5 Setup
+
+You can bootstrap both datasets from scripts:
+
+```bash
+python3 data_pipeline/download_era5_georgia.py --year 2023 --month 1
+python3 data_pipeline/download_prism.py
+```
+
+Default PRISM behavior:
+
+- downloads 3 daily `tmean` files starting at `20230101`
+- validates each download (size + real ZIP)
+- auto-extracts archives to `data_raw/prism/`
+- removes ZIP files after extraction
+
+Expected local layout:
+
+```text
+data_raw/
+├── era5_georgia_temp.nc
+└── prism/
+    ├── PRISM_tmean_stable_4kmD1_20230101_bil.bil
+    ├── PRISM_tmean_stable_4kmD1_20230101_bil.hdr
+    ├── PRISM_tmean_stable_4kmD1_20230102_bil.bil
+    └── ...
+```
+
+Expected outputs after training/evaluation:
+
+- `results/evaluation/metrics.json` (RMSE, MAE)
+- `results/evaluation/comparison_*.png` (ERA5 input vs prediction vs PRISM target)
+
 ## Data Placement and Validation
 
 Do not commit large raw datasets. Keep local files under `data_raw/`.
