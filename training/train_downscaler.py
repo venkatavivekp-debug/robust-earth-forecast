@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import random
 from pathlib import Path
 import sys
 from typing import Tuple
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
@@ -18,19 +20,26 @@ from models.cnn_downscaler import CNNDownscaler
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train ERA5->PRISM CNN downscaler baseline")
-    parser.add_argument("--era5-path", type=str, required=True, help="Path to ERA5 NetCDF file")
+    parser = argparse.ArgumentParser(description="Train temporal ERA5->PRISM CNN downscaler baseline")
+    parser.add_argument(
+        "--era5-path",
+        type=str,
+        default="data_raw/era5_georgia_temp.nc",
+        help="Path to ERA5 NetCDF file",
+    )
     parser.add_argument(
         "--prism-path",
         type=str,
-        required=True,
+        default="data_raw/prism",
         help="Path to PRISM raster file or directory of daily rasters",
     )
+    parser.add_argument("--history-length", type=int, default=3, help="Number of ERA5 timesteps [t-k+1 ... t]")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--device",
         type=str,
@@ -45,6 +54,14 @@ def parse_args() -> argparse.Namespace:
         help="Output path for best model checkpoint",
     )
     return parser.parse_args()
+
+
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def resolve_device(device_arg: str) -> torch.device:
@@ -75,7 +92,7 @@ def split_dataset(dataset: ERA5_PRISM_Dataset, val_fraction: float) -> Tuple[Sub
         val_size = n_total - 1
 
     train_size = n_total - val_size
-    # Simple chronological split keeps this baseline deterministic and easy to reproduce.
+    # Chronological split keeps this baseline deterministic and simple.
     train_indices = list(range(train_size))
     val_indices = list(range(train_size, n_total))
     return Subset(dataset, train_indices), Subset(dataset, val_indices)
@@ -112,6 +129,7 @@ def run_epoch(
 
 def main() -> None:
     args = parse_args()
+    set_seed(args.seed)
     device = resolve_device(args.device)
 
     era5_path = Path(args.era5_path)
@@ -128,8 +146,8 @@ def main() -> None:
     dataset = ERA5_PRISM_Dataset(
         era5_path=str(era5_path),
         prism_path=str(prism_path),
+        history_length=args.history_length,
     )
-    # Train/validation split happens after ERA5/PRISM temporal alignment.
     train_set, val_set = split_dataset(dataset, args.val_fraction)
 
     train_loader = DataLoader(
@@ -160,7 +178,8 @@ def main() -> None:
         f"Dataset: total={len(dataset)} train={len(train_set)} val={len(val_set)} "
         f"input_shape={tuple(sample_x.shape)} target_shape={tuple(sample_y.shape)}"
     )
-    print(f"Device: {device.type}")
+    print(f"History length: {args.history_length}")
+    print(f"Device: {device.type} | Seed: {args.seed}")
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
@@ -169,7 +188,7 @@ def main() -> None:
         improved = val_loss < best_val_loss
         if improved:
             best_val_loss = val_loss
-            # Save only the best validation checkpoint for clean demo reproducibility.
+            # Keep one best checkpoint for reproducible evaluation.
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),

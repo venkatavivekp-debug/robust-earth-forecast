@@ -1,49 +1,57 @@
 # Robust Earth Forecast
 
-Master's-level research baseline for geospatial climate downscaling over Georgia.
+A clean, research-quality baseline for **temporal climate downscaling** over Georgia.
 
-## Project Overview
+## 1) Project Overview
 
-This project demonstrates a practical downscaling task:
-**map coarse ERA5 near-surface temperature to higher-resolution PRISM temperature**.
+This project predicts high-resolution PRISM temperature from coarse ERA5 reanalysis using temporal context:
 
-Why this matters:
-- climate analyses often need finer spatial detail than global reanalysis grids
-- downscaling is a core step for regional climate risk and environmental modeling
+- input: ERA5 sequence `[t-k+1 ... t]`
+- target: PRISM map at time `t`
+- baseline model: compact CNN that treats time as input channels
 
-What is implemented now:
-- robust ERA5 + PRISM data ingestion
-- date-aligned ERA5->PRISM supervised dataset
-- compact CNN downscaler baseline
-- reproducible train/evaluate pipeline with metrics + visualization
+Why it matters: climate models and reanalysis are often coarse, while decision-making needs finer local structure.
 
-## Pipeline Summary
+## 2) What Is ERA5 vs PRISM
+
+- **ERA5**: global reanalysis, coarse spatial grid, strong temporal coverage.
+- **PRISM**: higher-resolution gridded climate observations for regional analysis.
+
+This baseline learns a supervised mapping from coarse ERA5 to finer PRISM.
+
+## 3) Temporal Modeling Upgrade
+
+Previous baseline:
 
 ```text
-ERA5 (coarse daily temperature, NetCDF)
-        ->
-PRISM (higher-resolution daily temperature rasters)
-        ->
-ERA5/PRISM date + spatial alignment
-        ->
-CNN Downscaler
-        ->
-Predicted high-resolution temperature
-        ->
-Evaluation: RMSE, MAE, comparison plot
+ERA5(t) -> PRISM(t)
 ```
 
-## Run Order
+Current baseline:
 
-Run from project root in this exact order:
+```text
+ERA5(t-k+1 ... t) -> PRISM(t)
+```
 
-1. Create virtual environment
-2. Install requirements
-3. Download ERA5
-4. Download PRISM
-5. Train model
-6. Evaluate model
-7. Open notebook
+The `--history-length` argument controls `k` (default `3`).
+
+## 4) Pipeline Summary
+
+```text
+Download ERA5 + PRISM
+        ->
+Date matching + temporal window construction
+        ->
+Temporal CNN training
+        ->
+Inference at PRISM resolution
+        ->
+Evaluation (RMSE, MAE, comparison plot)
+```
+
+## 5) Exact Run Commands
+
+Run from project root:
 
 ```bash
 python -m venv .venv
@@ -52,16 +60,13 @@ pip install -r requirements.txt
 python data_pipeline/download_era5_georgia.py
 python data_pipeline/download_prism.py
 python training/train_downscaler.py \
-  --era5-path data_raw/era5_georgia_temp.nc \
-  --prism-path data_raw/prism \
+  --history-length 3 \
   --epochs 20 \
   --batch-size 4 \
   --learning-rate 1e-3 \
-  --device auto \
   --checkpoint-out checkpoints/cnn_downscaler_best.pt
 python evaluation/evaluate_model.py \
-  --era5-path data_raw/era5_georgia_temp.nc \
-  --prism-path data_raw/prism \
+  --history-length 3 \
   --checkpoint-path checkpoints/cnn_downscaler_best.pt \
   --num-samples 8 \
   --num-plots 1 \
@@ -69,65 +74,56 @@ python evaluation/evaluate_model.py \
 jupyter notebook notebooks/climate_forecasting_demo.ipynb
 ```
 
-## Example Output
+Defaults used by train/eval if not provided:
 
-Example evaluation figure:
+- ERA5 path: `data_raw/era5_georgia_temp.nc`
+- PRISM path: `data_raw/prism`
+- checkpoint: `checkpoints/cnn_downscaler_best.pt`
 
-![ERA5 PRISM comparison](results/evaluation/comparison_1_20230101.png)
+## 6) Example Output
+
+Saved evaluation artifact:
+
+![Temporal Downscaling Example](results/evaluation/comparison.png)
 
 Interpretation:
-- left: ERA5 input (upsampled from coarse grid)
-- middle: CNN prediction at PRISM-like resolution
-- right: PRISM ground-truth target
 
-Example metrics (from `results/evaluation/metrics.json` in this repo):
-- RMSE: `14.546989758809408`
-- MAE: `14.394099553426107`
-- Evaluated samples: `3`
+- left: most recent ERA5 frame (`t`) upsampled to PRISM grid
+- middle: temporal CNN prediction
+- right: PRISM ground truth
 
-## Notebook Demo
+Metrics are written to:
 
-Open:
+- `results/evaluation/metrics.json`
 
-```bash
-jupyter notebook notebooks/climate_forecasting_demo.ipynb
-```
+with fields:
 
-The notebook is the walkthrough of:
-- ERA5 vs PRISM data framing
-- baseline CNN model setup
-- inference and visualization
-- saved evaluation artifact display
+- `rmse`
+- `mae`
+- `num_samples`
+- `history_length`
 
-## Data Notes
+## 7) Next Steps
 
-Expected local inputs:
-- ERA5 NetCDF: `data_raw/era5_georgia_temp.nc`
-- PRISM rasters directory: `data_raw/prism/`
+This repository is a minimal, strong baseline. Logical research upgrades:
 
-PRISM downloader defaults:
-- variable: `tmean`
-- dates: 3 days starting `20230101`
-- destination: `data_raw/prism/`
-
-## Research Direction
-
-This repository is intentionally a baseline foundation.
-Next step is to move from static spatial CNN mapping to richer **spatiotemporal models** (for example ConvLSTM and Transformer approaches), with future work aligned to **Prithvi WxC-style climate modeling directions**.
+1. Temporal encoder upgrade (ConvLSTM / temporal transformers).
+2. Multimodal predictors (humidity, pressure, wind, topography).
+3. Uncertainty-aware outputs (ensembles or probabilistic losses).
 
 ## Common Errors
 
-- Missing ERA5 file
-  - Error: `ERA5 file not found: data_raw/era5_georgia_temp.nc`
-  - Fix: `python data_pipeline/download_era5_georgia.py`
+- Missing ERA5 file:
+  - `ERA5 file not found: data_raw/era5_georgia_temp.nc`
+  - Run: `python data_pipeline/download_era5_georgia.py`
 
-- Missing PRISM rasters
-  - Error: `No PRISM raster files found in data_raw/prism`
-  - Fix: `python data_pipeline/download_prism.py`
+- Missing PRISM rasters:
+  - `No PRISM raster files found in data_raw/prism`
+  - Run: `python data_pipeline/download_prism.py`
 
-- Missing checkpoint
-  - Error: `Checkpoint not found: checkpoints/cnn_downscaler_best.pt`
-  - Fix: run training, then rerun evaluation
+- Missing checkpoint:
+  - `Checkpoint not found: checkpoints/cnn_downscaler_best.pt`
+  - Run training first, then evaluation.
 
 ## Repository Structure
 
@@ -141,13 +137,9 @@ robust-earth-forecast/
 ├── notebooks/
 ├── results/
 │   └── evaluation/
-│       ├── comparison_1_20230101.png
+│       ├── comparison.png
 │       └── metrics.json
 ├── README.md
 ├── requirements.txt
 └── .gitignore
 ```
-
-## Author
-
-Venkata Vivek Panguluri

@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -31,19 +31,30 @@ def _configure_plot_cache() -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate ERA5->PRISM CNN downscaler")
-    parser.add_argument("--era5-path", type=str, required=True, help="Path to ERA5 NetCDF file")
+    parser = argparse.ArgumentParser(description="Evaluate temporal ERA5->PRISM CNN downscaler")
+    parser.add_argument(
+        "--era5-path",
+        type=str,
+        default="data_raw/era5_georgia_temp.nc",
+        help="Path to ERA5 NetCDF file",
+    )
     parser.add_argument(
         "--prism-path",
         type=str,
-        required=True,
+        default="data_raw/prism",
         help="Path to PRISM raster file or directory",
     )
     parser.add_argument(
         "--checkpoint-path",
         type=str,
-        required=True,
+        default="checkpoints/cnn_downscaler_best.pt",
         help="Path to trained model checkpoint",
+    )
+    parser.add_argument(
+        "--history-length",
+        type=int,
+        default=None,
+        help="Temporal history length; if omitted, inferred from checkpoint",
     )
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--num-samples", type=int, default=8, help="Max samples to evaluate")
@@ -78,24 +89,26 @@ def resolve_device(device_arg: str) -> torch.device:
     return torch.device("cpu")
 
 
-def load_model(checkpoint_path: Path, device: torch.device) -> CNNDownscaler:
+def load_model(checkpoint_path: Path, device: torch.device) -> Tuple[CNNDownscaler, int]:
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
         model_config = checkpoint.get("model_config", {})
+        in_channels = int(model_config.get("in_channels", 1))
         model = CNNDownscaler(
-            in_channels=model_config.get("in_channels", 1),
-            out_channels=model_config.get("out_channels", 1),
-            base_channels=model_config.get("base_channels", 32),
+            in_channels=in_channels,
+            out_channels=int(model_config.get("out_channels", 1)),
+            base_channels=int(model_config.get("base_channels", 32)),
         )
         model.load_state_dict(checkpoint["model_state_dict"])
     else:
         model = CNNDownscaler()
         model.load_state_dict(checkpoint)
+        in_channels = 1
 
     model.to(device)
     model.eval()
-    return model
+    return model, in_channels
 
 
 def save_comparison_plot(
@@ -108,8 +121,10 @@ def save_comparison_plot(
     _configure_plot_cache()
     import matplotlib.pyplot as plt
 
+    # Temporal baseline visualization uses the most recent ERA5 frame at t.
+    era5_last = era5_input[-1].unsqueeze(0).unsqueeze(0)
     era5_up = F.interpolate(
-        era5_input.unsqueeze(0),
+        era5_last,
         size=(target.shape[-2], target.shape[-1]),
         mode="bilinear",
         align_corners=False,
@@ -125,7 +140,7 @@ def save_comparison_plot(
     fig, axes = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
 
     im0 = axes[0].imshow(era5_np, cmap="coolwarm", vmin=vmin, vmax=vmax)
-    axes[0].set_title("ERA5 Input (Upsampled)")
+    axes[0].set_title("ERA5 t (Upsampled)")
     axes[0].axis("off")
 
     axes[1].imshow(pred_np, cmap="coolwarm", vmin=vmin, vmax=vmax)
@@ -152,6 +167,7 @@ def main() -> None:
     era5_path = Path(args.era5_path)
     prism_path = Path(args.prism_path)
     checkpoint_path = Path(args.checkpoint_path)
+
     if not era5_path.exists():
         raise FileNotFoundError(
             f"ERA5 file not found: {era5_path}. Run data_pipeline/download_era5_georgia.py first."
@@ -165,18 +181,29 @@ def main() -> None:
             f"Checkpoint not found: {checkpoint_path}. Run training/train_downscaler.py first."
         )
 
-    dataset = ERA5_PRISM_Dataset(str(era5_path), str(prism_path))
-    # Evaluate a small configurable subset for quick research iteration.
-    n_eval = min(args.num_samples, len(dataset))
+    model, checkpoint_history = load_model(checkpoint_path, device)
+    history_length = args.history_length if args.history_length is not None else checkpoint_history
 
-    if n_eval < 1:
+    dataset = ERA5_PRISM_Dataset(
+        str(era5_path),
+        str(prism_path),
+        history_length=history_length,
+    )
+
+    if len(dataset) < 1:
         raise RuntimeError("No samples available for evaluation")
 
+    sample_x, _ = dataset[0]
+    if sample_x.shape[0] != checkpoint_history:
+        raise RuntimeError(
+            f"History mismatch: dataset uses {sample_x.shape[0]} channels but checkpoint expects {checkpoint_history}. "
+            "Use --history-length to match training configuration."
+        )
+
+    n_eval = min(args.num_samples, len(dataset))
     eval_indices = list(range(n_eval))
     eval_subset = torch.utils.data.Subset(dataset, eval_indices)
     loader = DataLoader(eval_subset, batch_size=args.batch_size, shuffle=False)
-
-    model = load_model(checkpoint_path, device)
 
     rmse_values: List[float] = []
     mae_values: List[float] = []
@@ -201,18 +228,18 @@ def main() -> None:
                     break
 
                 if plots_saved < args.num_plots:
-                    # Save side-by-side geospatial maps for qualitative inspection.
                     date = dataset.metadata(eval_indices[global_index]).date
-                    plot_path = (
-                        results_dir
-                        / f"comparison_{plots_saved + 1}_{date.strftime('%Y%m%d')}.png"
-                    )
+                    if plots_saved == 0:
+                        plot_path = results_dir / "comparison.png"
+                    else:
+                        plot_path = results_dir / f"comparison_{plots_saved + 1}_{date.strftime('%Y%m%d')}.png"
+
                     save_comparison_plot(
                         era5_input=x[i].cpu(),
                         prediction=pred[i].cpu(),
                         target=y[i].cpu(),
                         output_path=plot_path,
-                        title=f"ERA5->PRISM Downscaling | {date.date()}",
+                        title=f"Temporal ERA5->PRISM | {date.date()} | history={history_length}",
                     )
                     plots_saved += 1
 
@@ -222,12 +249,14 @@ def main() -> None:
         "rmse": float(np.mean(rmse_values)),
         "mae": float(np.mean(mae_values)),
         "num_samples": int(n_eval),
+        "history_length": int(history_length),
     }
 
     metrics_path = results_dir / "metrics.json"
     metrics_path.write_text(json.dumps(metrics, indent=2))
 
     print(f"Evaluated samples: {n_eval}")
+    print(f"History length: {history_length}")
     print(f"RMSE: {metrics['rmse']:.4f}")
     print(f"MAE: {metrics['mae']:.4f}")
     print(f"Metrics saved to: {metrics_path}")

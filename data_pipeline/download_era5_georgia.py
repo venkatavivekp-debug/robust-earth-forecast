@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import calendar
 from pathlib import Path
+import socket
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +52,15 @@ def main() -> None:
             "ERA5 download requires CDS API credentials. "
             "Create ~/.cdsapirc first: https://cds.climate.copernicus.eu/how-to-api"
         )
+
+    # Avoid long CDS retry loops when network/DNS is unavailable.
+    try:
+        socket.gethostbyname("cds.climate.copernicus.eu")
+    except OSError as exc:
+        raise RuntimeError(
+            "Cannot resolve cds.climate.copernicus.eu. "
+            "Check internet/DNS connectivity before downloading ERA5."
+        ) from exc
 
     try:
         import cdsapi

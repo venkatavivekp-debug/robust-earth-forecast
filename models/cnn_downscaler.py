@@ -8,7 +8,10 @@ import torch.nn.functional as F
 
 
 class CNNDownscaler(nn.Module):
-    """Compact CNN baseline for ERA5 -> PRISM spatial downscaling."""
+    """Compact CNN baseline for temporal ERA5 -> PRISM downscaling.
+
+    Input channels represent ordered ERA5 history steps [t-k+1 ... t].
+    """
 
     def __init__(self, in_channels: int = 1, out_channels: int = 1, base_channels: int = 32) -> None:
         super().__init__()

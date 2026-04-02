@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 import re
+import socket
 import zipfile
 
 import requests
@@ -171,6 +172,14 @@ def main() -> None:
 
     if args.days < 1:
         raise ValueError("--days must be >= 1")
+
+    # Fail fast when network/DNS is unavailable.
+    try:
+        socket.gethostbyname("services.nacse.org")
+    except OSError as exc:
+        raise RuntimeError(
+            "Cannot resolve services.nacse.org. Check internet/DNS connectivity before downloading PRISM."
+        ) from exc
 
     try:
         start_date = datetime.strptime(args.start_date, "%Y%m%d")

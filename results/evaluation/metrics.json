@@ -1,5 +1,6 @@
 {
   "rmse": 14.546989758809408,
   "mae": 14.394099553426107,
-  "num_samples": 3
+  "num_samples": 3,
+  "history_length": 3
 }
