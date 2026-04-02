@@ -120,7 +120,7 @@ def validate_prism_files(path: str | Path) -> list[Path]:
         sample = ", ".join(missing_dates[:3])
         raise RuntimeError(
             "PRISM raster filenames must include YYYYMMDD. "
-            f"Example invalid files: {sample}"
+            f"Invalid filenames found: {sample}"
         )
 
     return raster_files

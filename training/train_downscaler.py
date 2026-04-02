@@ -131,6 +131,7 @@ def main() -> None:
     args = parse_args()
     set_seed(args.seed)
     device = resolve_device(args.device)
+    print("Training started")
 
     era5_path = Path(args.era5_path)
     prism_path = Path(args.prism_path)
@@ -143,6 +144,7 @@ def main() -> None:
             f"PRISM path not found: {prism_path}. Run data_pipeline/download_prism.py first."
         )
 
+    print("Loading ERA5 and PRISM data")
     dataset = ERA5_PRISM_Dataset(
         era5_path=str(era5_path),
         prism_path=str(prism_path),

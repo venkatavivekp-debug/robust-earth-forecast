@@ -1,57 +1,35 @@
 # Robust Earth Forecast
 
-A clean, research-quality baseline for **temporal climate downscaling** over Georgia.
+A baseline deep learning pipeline for ERA5 to PRISM climate downscaling over Georgia.
 
-## 1) Project Overview
+## Overview
 
-This project predicts high-resolution PRISM temperature from coarse ERA5 reanalysis using temporal context:
+This repository implements a temperature downscaling framework that maps coarse ERA5 fields to higher-resolution PRISM targets over Georgia. The objective is to establish a reproducible baseline model and evaluation pipeline before extending to richer spatiotemporal architectures.
 
-- input: ERA5 sequence `[t-k+1 ... t]`
-- target: PRISM map at time `t`
-- baseline model: compact CNN that treats time as input channels
+## ERA5 vs PRISM
 
-Why it matters: climate models and reanalysis are often coarse, while decision-making needs finer local structure.
+- ERA5: coarse-resolution global reanalysis with strong temporal coverage.
+- PRISM: higher-resolution gridded climate product over regional domains.
 
-## 2) What Is ERA5 vs PRISM
+The downscaling task learns the mapping from ERA5 structure to PRISM local detail.
 
-- **ERA5**: global reanalysis, coarse spatial grid, strong temporal coverage.
-- **PRISM**: higher-resolution gridded climate observations for regional analysis.
+## What Is Implemented
 
-This baseline learns a supervised mapping from coarse ERA5 to finer PRISM.
+- ERA5 ingestion from NetCDF using `xarray`
+- PRISM ingestion from raster products using `rioxarray`
+- Temporal input windows: `ERA5(t-k+1 ... t) -> PRISM(t)`
+- Baseline CNN downscaling model
+- Evaluation pipeline with RMSE, MAE, and spatial comparison plots
 
-## 3) Temporal Modeling Upgrade
-
-Previous baseline:
-
-```text
-ERA5(t) -> PRISM(t)
-```
-
-Current baseline:
+## Pipeline Summary
 
 ```text
-ERA5(t-k+1 ... t) -> PRISM(t)
+ERA5 -> spatial/temporal alignment -> dataset -> baseline model -> prediction -> evaluation pipeline
 ```
 
-The `--history-length` argument controls `k` (default `3`).
+## Run Instructions
 
-## 4) Pipeline Summary
-
-```text
-Download ERA5 + PRISM
-        ->
-Date matching + temporal window construction
-        ->
-Temporal CNN training
-        ->
-Inference at PRISM resolution
-        ->
-Evaluation (RMSE, MAE, comparison plot)
-```
-
-## 5) Exact Run Commands
-
-Run from project root:
+Execute from project root:
 
 ```bash
 python -m venv .venv
@@ -71,45 +49,43 @@ python evaluation/evaluate_model.py \
   --num-samples 8 \
   --num-plots 1 \
   --results-dir results/evaluation
-jupyter notebook notebooks/climate_forecasting_demo.ipynb
+jupyter notebook notebooks/
 ```
 
-Defaults used by train/eval if not provided:
+Default paths used by training/evaluation scripts:
 
-- ERA5 path: `data_raw/era5_georgia_temp.nc`
-- PRISM path: `data_raw/prism`
-- checkpoint: `checkpoints/cnn_downscaler_best.pt`
+- ERA5: `data_raw/era5_georgia_temp.nc`
+- PRISM: `data_raw/prism`
+- Checkpoint: `checkpoints/cnn_downscaler_best.pt`
 
-## 6) Example Output
+## Results
 
-Saved evaluation artifact:
+Evaluation outputs are written to:
 
-![Temporal Downscaling Example](results/evaluation/comparison.png)
+- `results/evaluation/comparison_*.png`
+- `results/evaluation/metrics.json`
+
+Current tracked output:
+
+![Downscaling Output](results/evaluation/comparison_1_20230101.png)
 
 Interpretation:
 
-- left: most recent ERA5 frame (`t`) upsampled to PRISM grid
-- middle: temporal CNN prediction
-- right: PRISM ground truth
+- The baseline model captures large-scale thermal structure.
+- Fine spatial details are partially smoothed, consistent with a compact CNN baseline.
 
-Metrics are written to:
+## Limitations
 
-- `results/evaluation/metrics.json`
+- Temporal context is limited to a short fixed history window.
+- No multi-source predictors are included yet.
+- CNN outputs are spatially smooth relative to PRISM fine structures.
+- Current experiments use a limited local dataset size.
 
-with fields:
+## Future Work
 
-- `rmse`
-- `mae`
-- `num_samples`
-- `history_length`
-
-## 7) Next Steps
-
-This repository is a minimal, strong baseline. Logical research upgrades:
-
-1. Temporal encoder upgrade (ConvLSTM / temporal transformers).
-2. Multimodal predictors (humidity, pressure, wind, topography).
-3. Uncertainty-aware outputs (ensembles or probabilistic losses).
+- Temporal sequence encoders (ConvLSTM / transformer-based models)
+- Multi-source inputs (remote sensing, terrain, drone or airborne products)
+- Uncertainty-aware prediction (multi-output heads or probabilistic objectives)
 
 ## Common Errors
 
@@ -123,7 +99,7 @@ This repository is a minimal, strong baseline. Logical research upgrades:
 
 - Missing checkpoint:
   - `Checkpoint not found: checkpoints/cnn_downscaler_best.pt`
-  - Run training first, then evaluation.
+  - Run training before evaluation.
 
 ## Repository Structure
 
@@ -137,7 +113,7 @@ robust-earth-forecast/
 ├── notebooks/
 ├── results/
 │   └── evaluation/
-│       ├── comparison.png
+│       ├── comparison_1_20230101.png
 │       └── metrics.json
 ├── README.md
 ├── requirements.txt

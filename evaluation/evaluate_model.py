@@ -162,6 +162,7 @@ def main() -> None:
 
     results_dir = Path(args.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
+    print("Loading ERA5 and PRISM data for evaluation")
 
     device = resolve_device(args.device)
     era5_path = Path(args.era5_path)
@@ -229,10 +230,7 @@ def main() -> None:
 
                 if plots_saved < args.num_plots:
                     date = dataset.metadata(eval_indices[global_index]).date
-                    if plots_saved == 0:
-                        plot_path = results_dir / "comparison.png"
-                    else:
-                        plot_path = results_dir / f"comparison_{plots_saved + 1}_{date.strftime('%Y%m%d')}.png"
+                    plot_path = results_dir / f"comparison_{plots_saved + 1}_{date.strftime('%Y%m%d')}.png"
 
                     save_comparison_plot(
                         era5_input=x[i].cpu(),
@@ -252,6 +250,7 @@ def main() -> None:
         "history_length": int(history_length),
     }
 
+    print("Saving evaluation results")
     metrics_path = results_dir / "metrics.json"
     metrics_path.write_text(json.dumps(metrics, indent=2))
 
