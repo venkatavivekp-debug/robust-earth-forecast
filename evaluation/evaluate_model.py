@@ -5,19 +5,22 @@ import json
 import os
 from pathlib import Path
 import sys
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
-import torch
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
+
+try:
+    import torch
+    import torch.nn.functional as F
+    from torch.utils.data import DataLoader
+except ModuleNotFoundError:
+    torch = None
+    F = None
+    DataLoader = None
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-from datasets.prism_dataset import ERA5_PRISM_Dataset
-from models.cnn_downscaler import CNNDownscaler
 
 
 def _configure_plot_cache() -> None:
@@ -74,7 +77,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_device(device_arg: str) -> torch.device:
+def resolve_device(device_arg: str) -> Any:
     if device_arg == "cuda":
         return torch.device("cuda")
     if device_arg == "mps":
@@ -89,7 +92,9 @@ def resolve_device(device_arg: str) -> torch.device:
     return torch.device("cpu")
 
 
-def load_model(checkpoint_path: Path, device: torch.device) -> Tuple[CNNDownscaler, int]:
+def load_model(checkpoint_path: Path, device: Any) -> Tuple[Any, int]:
+    from models.cnn_downscaler import CNNDownscaler
+
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
@@ -112,9 +117,9 @@ def load_model(checkpoint_path: Path, device: torch.device) -> Tuple[CNNDownscal
 
 
 def save_comparison_plot(
-    era5_input: torch.Tensor,
-    prediction: torch.Tensor,
-    target: torch.Tensor,
+    era5_input: Any,
+    prediction: Any,
+    target: Any,
     output_path: Path,
     title: str,
 ) -> None:
@@ -159,6 +164,12 @@ def save_comparison_plot(
 
 def main() -> None:
     args = parse_args()
+    if torch is None or F is None or DataLoader is None:
+        raise ModuleNotFoundError(
+            "PyTorch is required to run evaluation. Install dependencies with: pip install -r requirements.txt"
+        )
+
+    from datasets.prism_dataset import ERA5_PRISM_Dataset
 
     results_dir = Path(args.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)

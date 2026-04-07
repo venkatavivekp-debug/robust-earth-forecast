@@ -4,19 +4,23 @@ import argparse
 import random
 from pathlib import Path
 import sys
-from typing import Tuple
+from typing import Any, Tuple
 
 import numpy as np
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, Subset
+
+try:
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import DataLoader, Subset
+except ModuleNotFoundError:
+    torch = None
+    nn = None
+    DataLoader = None
+    Subset = None
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-from datasets.prism_dataset import ERA5_PRISM_Dataset
-from models.cnn_downscaler import CNNDownscaler
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,7 +83,7 @@ def resolve_device(device_arg: str) -> torch.device:
     return torch.device("cpu")
 
 
-def split_dataset(dataset: ERA5_PRISM_Dataset, val_fraction: float) -> Tuple[Subset, Subset]:
+def split_dataset(dataset: Any, val_fraction: float) -> Tuple[Any, Any]:
     if not 0.0 < val_fraction < 1.0:
         raise ValueError("val_fraction must be between 0 and 1")
 
@@ -99,11 +103,11 @@ def split_dataset(dataset: ERA5_PRISM_Dataset, val_fraction: float) -> Tuple[Sub
 
 
 def run_epoch(
-    model: CNNDownscaler,
-    loader: DataLoader,
-    criterion: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    device: torch.device,
+    model: Any,
+    loader: Any,
+    criterion: Any,
+    optimizer: Any,
+    device: Any,
     train: bool,
 ) -> float:
     model.train(mode=train)
@@ -129,6 +133,14 @@ def run_epoch(
 
 def main() -> None:
     args = parse_args()
+    if torch is None or nn is None or DataLoader is None or Subset is None:
+        raise ModuleNotFoundError(
+            "PyTorch is required to run training. Install dependencies with: pip install -r requirements.txt"
+        )
+
+    from datasets.prism_dataset import ERA5_PRISM_Dataset
+    from models.cnn_downscaler import CNNDownscaler
+
     set_seed(args.seed)
     device = resolve_device(args.device)
     print("Training started")
