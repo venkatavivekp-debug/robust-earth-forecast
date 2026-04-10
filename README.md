@@ -71,8 +71,9 @@ Current interpretation:
 
 - ERA5 structure is captured at large scales.
 - Fine spatial structure remains harder to recover.
+- In current limited runs, the linear baseline can outperform deep models because the training set is small.
 - ConvLSTM should be compared directly against CNN using `baselines_summary.csv` and per-model metrics when ConvLSTM outputs are present.
-- In small local runs, data volume and temporal coverage can limit the observed gain.
+- With limited temporal coverage, simple baselines outperform deep models, highlighting the importance of larger datasets for spatiotemporal learning.
 
 ## Limitations
 
