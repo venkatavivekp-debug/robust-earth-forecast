@@ -20,6 +20,15 @@ DATE_PATTERN = re.compile(r"(19|20)\d{6}")
 
 
 @dataclass(frozen=True)
+class SampleRecord:
+    index: int
+    date: pd.Timestamp
+    prism_path: str
+    era5_start_idx: int
+    era5_end_idx: int
+
+
+@dataclass(frozen=True)
 class SampleMetadata:
     index: int
     date: pd.Timestamp
@@ -29,12 +38,10 @@ class SampleMetadata:
 
 
 class ERA5_PRISM_Dataset(Dataset):
-    """Temporal ERA5->PRISM dataset for baseline downscaling.
+    """Temporal ERA5->PRISM dataset for regional downscaling.
 
-    Alignment strategy:
-    1) Aggregate ERA5 to daily means.
-    2) For each PRISM date, build ERA5 history window [t-k+1 ... t].
-    3) Reproject/clip PRISM to ERA5 extent and pair tensors.
+    Input  X: [T, 1, H_era5, W_era5]
+    Target Y: [1, H_prism, W_prism]
     """
 
     def __init__(
@@ -64,69 +71,101 @@ class ERA5_PRISM_Dataset(Dataset):
         }
 
         prism_files = self._resolve_prism_files(self.prism_path)
-        self._samples: List[Tuple[np.ndarray, np.ndarray, pd.Timestamp, Path]] = []
+        self._records: List[SampleRecord] = []
+        self._prism_arrays: Dict[pd.Timestamp, np.ndarray] = {}
 
         stats = {
-            "prism_files": 0,
-            "parsed_dates": 0,
+            "prism_files_scanned": 0,
+            "candidate_dates": 0,
+            "usable_samples": 0,
             "skipped_bad_filename": 0,
+            "skipped_duplicate_date": 0,
             "skipped_missing_era5_date": 0,
             "skipped_insufficient_history": 0,
             "skipped_nonconsecutive_history": 0,
+            "skipped_raster_read_error": 0,
+            "skipped_clip_or_projection_error": 0,
         }
-        parsed_prism_dates: List[pd.Timestamp] = []
 
-        # First successfully loaded PRISM file defines a stable output grid.
-        template_raster = None
+        parsed_dates_preview: List[pd.Timestamp] = []
+        template_raster: Optional[xr.DataArray] = None
+
         for prism_file in prism_files:
-            stats["prism_files"] += 1
+            stats["prism_files_scanned"] += 1
 
             sample_date = self._parse_date_from_filename(prism_file)
             if sample_date is None:
                 stats["skipped_bad_filename"] += 1
                 continue
 
-            stats["parsed_dates"] += 1
-            parsed_prism_dates.append(sample_date)
+            stats["candidate_dates"] += 1
+            parsed_dates_preview.append(sample_date)
 
-            era5_idx = self._era5_index_by_date.get(sample_date)
-            if era5_idx is None:
+            if sample_date in self._prism_arrays:
+                stats["skipped_duplicate_date"] += 1
+                continue
+
+            era5_end_idx = self._era5_index_by_date.get(sample_date)
+            if era5_end_idx is None:
                 stats["skipped_missing_era5_date"] += 1
                 continue
 
-            start_idx = era5_idx - self.history_length + 1
-            if start_idx < 0:
+            era5_start_idx = era5_end_idx - self.history_length + 1
+            if era5_start_idx < 0:
                 stats["skipped_insufficient_history"] += 1
                 continue
 
-            era5_window_dates = self.era5_dates[start_idx : era5_idx + 1]
+            window_dates = self.era5_dates[era5_start_idx : era5_end_idx + 1]
             expected_dates = pd.date_range(end=sample_date, periods=self.history_length, freq="D")
-            if not np.array_equal(era5_window_dates.values, expected_dates.values):
+            if not np.array_equal(window_dates.values, expected_dates.values):
                 stats["skipped_nonconsecutive_history"] += 1
                 continue
 
-            prism_da = self._open_prism_raster(prism_file)
-            prism_da = self._clip_prism_to_era5(prism_da, self.era5_bounds)
+            try:
+                prism_da = self._open_prism_raster(prism_file)
+            except Exception:
+                stats["skipped_raster_read_error"] += 1
+                continue
 
-            if template_raster is None:
-                template_raster = prism_da
-            else:
-                prism_da = prism_da.rio.reproject_match(template_raster)
+            try:
+                prism_da = self._clip_prism_to_era5(prism_da, self.era5_bounds)
+                if template_raster is None:
+                    template_raster = prism_da
+                else:
+                    prism_da = prism_da.rio.reproject_match(template_raster)
+            except Exception:
+                stats["skipped_clip_or_projection_error"] += 1
+                continue
 
-            prism_array = prism_da.values.astype(np.float32)
-            prism_array = self._prepare_prism_values(prism_array)
-
-            era5_window = (
-                self.era5_daily.isel(time=slice(start_idx, era5_idx + 1)).values.astype(np.float32)
+            prism_array = self._prepare_prism_values(prism_da.values.astype(np.float32))
+            self._prism_arrays[sample_date] = prism_array
+            self._records.append(
+                SampleRecord(
+                    index=len(self._records),
+                    date=sample_date,
+                    prism_path=str(prism_file),
+                    era5_start_idx=era5_start_idx,
+                    era5_end_idx=era5_end_idx,
+                )
             )
-            era5_window = self._fill_missing(era5_window)
+            stats["usable_samples"] += 1
 
-            self._samples.append((era5_window, prism_array, sample_date, prism_file))
+        self._records.sort(key=lambda r: r.date)
+        self._records = [
+            SampleRecord(
+                index=i,
+                date=r.date,
+                prism_path=r.prism_path,
+                era5_start_idx=r.era5_start_idx,
+                era5_end_idx=r.era5_end_idx,
+            )
+            for i, r in enumerate(self._records)
+        ]
 
-        if not self._samples:
+        if not self._records:
             era5_start = self.era5_dates.min().strftime("%Y-%m-%d")
             era5_end = self.era5_dates.max().strftime("%Y-%m-%d")
-            prism_preview = ", ".join(sorted({d.strftime("%Y-%m-%d") for d in parsed_prism_dates})[:5])
+            prism_preview = ", ".join(sorted({d.strftime("%Y-%m-%d") for d in parsed_dates_preview})[:5])
             raise RuntimeError(
                 "No aligned ERA5/PRISM pairs were created. "
                 f"ERA5 date range: {era5_start} to {era5_end}. "
@@ -134,33 +173,53 @@ class ERA5_PRISM_Dataset(Dataset):
                 f"First PRISM dates found: {prism_preview or 'none'}."
             )
 
+        self.summary_stats = stats
         if verbose:
             print("Dataset summary:")
             print(f"  history_length={self.history_length}")
-            print(f"  prism_files_scanned={stats['prism_files']}")
-            print(f"  samples_created={len(self._samples)}")
+            print(f"  total_candidate_dates={stats['candidate_dates']}")
+            print(f"  usable_samples={stats['usable_samples']}")
             print(f"  skipped_bad_filename={stats['skipped_bad_filename']}")
+            print(f"  skipped_duplicate_date={stats['skipped_duplicate_date']}")
             print(f"  skipped_missing_era5_date={stats['skipped_missing_era5_date']}")
             print(f"  skipped_insufficient_history={stats['skipped_insufficient_history']}")
             print(f"  skipped_nonconsecutive_history={stats['skipped_nonconsecutive_history']}")
+            print(f"  skipped_raster_read_error={stats['skipped_raster_read_error']}")
+            print(f"  skipped_clip_or_projection_error={stats['skipped_clip_or_projection_error']}")
 
     def __len__(self) -> int:
-        return len(self._samples)
+        return len(self._records)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        era5_window, prism_array, _, _ = self._samples[idx]
-        x = torch.from_numpy(era5_window)  # [T, H, W]
+        rec = self._records[idx]
+
+        era5_window = (
+            self.era5_daily
+            .isel(time=slice(rec.era5_start_idx, rec.era5_end_idx + 1))
+            .values.astype(np.float32)
+        )
+        era5_window = self._fill_missing(era5_window)
+        prism_array = self._prism_arrays[rec.date]
+
+        x = torch.from_numpy(era5_window).unsqueeze(1)  # [T, 1, H, W]
         y = torch.from_numpy(prism_array).unsqueeze(0)  # [1, H_high, W_high]
         return x, y
 
     def metadata(self, idx: int) -> SampleMetadata:
-        era5_window, prism_array, sample_date, prism_file = self._samples[idx]
+        rec = self._records[idx]
+        era5_shape = (
+            self.history_length,
+            1,
+            int(self.era5_daily.shape[-2]),
+            int(self.era5_daily.shape[-1]),
+        )
+        prism_shape = tuple(int(v) for v in self._prism_arrays[rec.date].shape)
         return SampleMetadata(
             index=idx,
-            date=sample_date,
-            prism_path=str(prism_file),
-            era5_shape=tuple(int(v) for v in era5_window.shape),
-            prism_shape=tuple(int(v) for v in prism_array.shape),
+            date=rec.date,
+            prism_path=rec.prism_path,
+            era5_shape=era5_shape,
+            prism_shape=prism_shape,
         )
 
     @staticmethod
@@ -175,6 +234,9 @@ class ERA5_PRISM_Dataset(Dataset):
             era5_ds = xr.open_dataset(era5_path)
         except Exception as exc:
             raise RuntimeError(f"Failed to open ERA5 NetCDF: {era5_path}") from exc
+
+        if not era5_ds.data_vars:
+            raise ValueError("ERA5 dataset has no data variables")
 
         if era5_variable is None:
             era5_variable = "t2m" if "t2m" in era5_ds.data_vars else list(era5_ds.data_vars)[0]
@@ -192,7 +254,6 @@ class ERA5_PRISM_Dataset(Dataset):
 
         era5_da = era5_da.transpose(time_dim, lat_dim, lon_dim)
 
-        # ERA5 temperatures are commonly in Kelvin.
         if float(era5_da.mean()) > 150.0:
             era5_da = era5_da - 273.15
 
@@ -200,6 +261,10 @@ class ERA5_PRISM_Dataset(Dataset):
         era5_daily = era5_daily.rename(
             {time_dim: "time", lat_dim: "latitude", lon_dim: "longitude"}
         )
+
+        if era5_daily.sizes.get("time", 0) < 1:
+            raise ValueError("ERA5 dataset has no usable daily timesteps")
+
         return era5_daily
 
     @staticmethod
@@ -225,7 +290,7 @@ class ERA5_PRISM_Dataset(Dataset):
             if zip_files:
                 raise ValueError(
                     "Found PRISM zip archives but no extracted raster files. "
-                    "Extract the archives first (e.g., unzip PRISM_*.zip -d data_raw/prism)."
+                    "Extract archives first (or rerun data_pipeline/download_prism.py)."
                 )
 
             raise FileNotFoundError(
@@ -238,7 +303,7 @@ class ERA5_PRISM_Dataset(Dataset):
             if suffix == ".zip":
                 raise ValueError(
                     f"PRISM path points to zip archive: {prism_path}. "
-                    "Extract it first and pass either the extracted raster file or containing directory."
+                    "Extract it first and pass the extracted directory or raster path."
                 )
             if suffix not in SUPPORTED_PRISM_EXTENSIONS:
                 raise ValueError(
@@ -255,7 +320,7 @@ class ERA5_PRISM_Dataset(Dataset):
             prism_da = rioxarray.open_rasterio(prism_file, masked=True)
         except Exception as exc:
             raise RuntimeError(
-                f"Failed to read PRISM raster '{prism_file}'. Ensure the file is a valid scientific raster."
+                f"Failed to read PRISM raster '{prism_file}'. Ensure it is a valid geospatial raster."
             ) from exc
 
         if "band" in prism_da.dims:
@@ -276,21 +341,10 @@ class ERA5_PRISM_Dataset(Dataset):
         prism_da: xr.DataArray, era5_bounds: Tuple[float, float, float, float]
     ) -> xr.DataArray:
         min_lon, max_lon, min_lat, max_lat = era5_bounds
-        try:
-            clipped = prism_da.rio.clip_box(
-                minx=min_lon,
-                maxx=max_lon,
-                miny=min_lat,
-                maxy=max_lat,
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                "Failed to clip PRISM raster to ERA5 bounds. "
-                "Verify that both datasets overlap in Georgia and use valid georeferencing."
-            ) from exc
+        clipped = prism_da.rio.clip_box(minx=min_lon, maxx=max_lon, miny=min_lat, maxy=max_lat)
 
         if clipped.sizes.get("x", 0) == 0 or clipped.sizes.get("y", 0) == 0:
-            raise ValueError("PRISM raster has no spatial overlap with ERA5 extent after clipping.")
+            raise ValueError("PRISM raster has no spatial overlap with ERA5 extent after clipping")
 
         return clipped
 
@@ -304,7 +358,6 @@ class ERA5_PRISM_Dataset(Dataset):
     def _prepare_prism_values(self, prism_array: np.ndarray) -> np.ndarray:
         prism_array = self._fill_missing(prism_array)
 
-        # Some PRISM sources store temperatures in hundredths of degrees C.
         if self.auto_scale_prism:
             p95 = float(np.percentile(np.abs(prism_array), 95))
             if p95 > 500.0:
@@ -315,10 +368,10 @@ class ERA5_PRISM_Dataset(Dataset):
     @staticmethod
     def _fill_missing(array: np.ndarray) -> np.ndarray:
         if not np.isnan(array).any():
-            return array
+            return array.astype(np.float32)
 
         finite = array[np.isfinite(array)]
         if finite.size == 0:
-            raise ValueError("Encountered raster with all values as NaN")
+            raise ValueError("Encountered array with all values as NaN")
 
         return np.nan_to_num(array, nan=float(finite.mean())).astype(np.float32)

@@ -1,95 +1,36 @@
 # Robust Earth Forecast
 
-A baseline deep learning pipeline for ERA5 to PRISM climate downscaling over Georgia.
+A literature-aligned regional climate downscaling pipeline for ERA5 to PRISM temperature prediction over Georgia.
 
-## Overview
+## Problem Statement
 
-This repository implements a baseline deep learning pipeline for climate downscaling, mapping ERA5 reanalysis temperature to high-resolution PRISM observations over Georgia. The pipeline includes data ingestion (NetCDF and raster formats), spatial alignment, supervised dataset construction, and CNN-based modeling with evaluation through RMSE, MAE, and visual comparisons.
+Regional climate analysis often requires finer spatial detail than global reanalysis products provide. This project formulates downscaling as a supervised learning problem:
 
-The current model captures large-scale temperature patterns but smooths finer spatial variability, reflecting the inherent gap between coarse reanalysis data and high-resolution observations.
+`ERA5(t-k+1 ... t) -> PRISM(t)`
 
-The implementation is intentionally structured as a strong baseline for further extensions. Future work includes incorporating temporal context (multi-step ERA5 inputs), integrating additional data sources such as remote sensing or drone imagery, and moving toward uncertainty-aware forecasting approaches.
+where ERA5 provides coarse-resolution temperature context and PRISM provides higher-resolution daily targets.
 
-## Data
+## Motivation From Literature
 
-- ERA5: coarse-resolution reanalysis temperature fields loaded from NetCDF with `xarray`.
-- PRISM: higher-resolution daily temperature rasters loaded with `rioxarray`.
-- The pipeline performs spatial alignment to a shared geospatial frame and temporal matching by date before supervised training.
+- ConvLSTM (Shi et al.) provides a practical spatiotemporal modeling approach for sequence-to-field prediction.
+- FourCastNet and GraphCast show the impact of learned spatiotemporal dynamics for weather forecasting at scale.
+- Prithvi WxC highlights the trend toward large weather-climate foundation models.
+
+This repository is not a reproduction of those large systems. It is a compact regional pipeline that is technically aligned with those directions while remaining tractable for iterative research.
 
 ## What Is Implemented
 
-- ERA5 ingestion and validation from NetCDF
-- PRISM raster ingestion and validation (`.bil`, `.tif`, `.tiff`, `.asc`)
-- Temporal input windows: `ERA5(t-k+1 ... t) -> PRISM(t)`
-- Baseline CNN downscaling model
-- Training pipeline with checkpointing
-- Evaluation with RMSE, MAE, and comparison plots
-
-## Pipeline Summary
-
-```text
-ERA5 -> spatial/temporal alignment -> dataset -> baseline model -> prediction -> evaluation
-```
-
-## Run Instructions
-
-Run from project root:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python data_pipeline/download_era5_georgia.py
-python data_pipeline/download_prism.py
-python training/train_downscaler.py --history-length 3 --epochs 20 --batch-size 4 --learning-rate 1e-3
-python evaluation/evaluate_model.py --history-length 3 --checkpoint-path checkpoints/cnn_downscaler_best.pt --num-samples 8 --num-plots 1 --results-dir results/evaluation
-jupyter notebook notebooks/
-```
-
-Default paths used by training/evaluation:
-
-- ERA5: `data_raw/era5_georgia_temp.nc`
-- PRISM: `data_raw/prism`
-- Checkpoint: `checkpoints/cnn_downscaler_best.pt`
-
-## Results
-
-![ERA5 to PRISM Comparison](results/evaluation/comparison_1_20230101.png)
-
-- Left: ERA5 input (coarse resolution, upsampled for visual comparison)
-- Middle: model prediction
-- Right: PRISM ground truth
-
-Metrics are reported in `results/evaluation/metrics.json`.
-
-- RMSE: 14.5470
-- MAE: 14.3941
-
-## Limitations
-
-- Temporal context is limited to a short fixed history window.
-- The CNN baseline introduces spatial smoothing relative to PRISM fine-scale variability.
-- Multi-source inputs are not yet integrated.
-- Current experiments use a limited local date range.
-
-## Future Work
-
-- Temporal modeling with ConvLSTM or other sequence-based architectures
-- Multi-source data integration (remote sensing, drone imagery, terrain features)
-- Higher-dimensional spatiotemporal multi-channel inputs
-- Uncertainty-aware prediction with probabilistic objectives
-
-## Common Errors
-
-- Missing ERA5 file:
-  - `ERA5 file not found: data_raw/era5_georgia_temp.nc`
-  - Run: `python data_pipeline/download_era5_georgia.py`
-- Missing PRISM rasters:
-  - `No PRISM raster files found in data_raw/prism`
-  - Run: `python data_pipeline/download_prism.py`
-- Missing checkpoint:
-  - `Checkpoint not found: checkpoints/cnn_downscaler_best.pt`
-  - Run training before evaluation.
+- ERA5 ingestion from NetCDF using `xarray`
+- PRISM ingestion from rasters (`.bil`, `.tif`, `.tiff`, `.asc`) using `rioxarray`
+- Temporal dataset construction with date matching and history windows
+- Baselines:
+  - persistence baseline (upsampled latest ERA5 frame)
+  - global linear baseline (`y = a*x + b` fitted on training split)
+  - spatial CNN baseline
+- Main temporal model:
+  - ConvLSTM downscaler
+- Training pipeline with model selection (`cnn` or `convlstm`) and checkpointing
+- Evaluation pipeline with RMSE, MAE, bias, per-model plots, and model-comparison outputs
 
 ## Repository Structure
 
@@ -101,11 +42,85 @@ robust-earth-forecast/
 ├── training/
 ├── evaluation/
 ├── notebooks/
+│   └── era5_prism_downscaling.ipynb
 ├── results/
 │   └── evaluation/
-│       ├── comparison_1_20230101.png
-│       └── metrics.json
 ├── README.md
 ├── requirements.txt
 └── .gitignore
 ```
+
+## Run Commands
+
+Run from project root:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+python data_pipeline/download_era5_georgia.py --year 2023 --month 1
+python data_pipeline/download_prism.py --start-date 20230101 --days 3 --variable tmean
+
+python training/train_downscaler.py --model cnn --history-length 5 --epochs 20 --batch-size 4 --learning-rate 1e-3
+python training/train_downscaler.py --model convlstm --history-length 5 --epochs 20 --batch-size 4 --learning-rate 1e-3
+
+python evaluation/evaluate_model.py \
+  --models persistence linear cnn convlstm \
+  --history-length 5 \
+  --cnn-checkpoint checkpoints/cnn_best.pt \
+  --convlstm-checkpoint checkpoints/convlstm_best.pt \
+  --num-samples 8
+
+jupyter notebook notebooks/era5_prism_downscaling.ipynb
+```
+
+Default data/checkpoint locations:
+
+- ERA5: `data_raw/era5_georgia_temp.nc`
+- PRISM: `data_raw/prism`
+- CNN checkpoint: `checkpoints/cnn_best.pt`
+- ConvLSTM checkpoint: `checkpoints/convlstm_best.pt`
+
+## Results
+
+Sample CNN output:
+
+![CNN Downscaling Output](results/evaluation/cnn/comparison_1_20230101.png)
+
+Interpretation:
+
+- left/top panel: ERA5 input upsampled to PRISM grid
+- prediction panel: model output
+- target panel: PRISM reference
+- error panel: absolute residual map
+
+Metric outputs are written to:
+
+- `results/evaluation/<model>/metrics.json`
+- `results/evaluation/metrics_summary.csv`
+- `results/evaluation/model_comparison.png`
+
+Tracked sample metric file:
+
+- `results/evaluation/cnn/metrics.json` (RMSE/MAE from a prior run)
+
+## Limitations
+
+- Single region (Georgia) and a limited date range
+- Single target variable (temperature)
+- Temporal context is short relative to seasonal and synoptic variability
+- CNN/ConvLSTM outputs can smooth fine-scale terrain-driven structure
+
+## Future Work
+
+- Multi-variable ERA5 predictors (e.g., humidity, wind, pressure)
+- Multimodal fusion with remote sensing, terrain, and airborne/drone data
+- Uncertainty-aware objectives and calibrated probabilistic outputs
+- Adaptation and fine-tuning strategies inspired by large weather-climate models
+
+## Common Failure Modes
+
+- `ERA5 file not found`: run `python data_pipeline/download_era5_georgia.py`
+- `PRISM path not found` or no rasters: run `python data_pipeline/download_prism.py`
+- missing checkpoints during evaluation: train `cnn` and/or `convlstm` first

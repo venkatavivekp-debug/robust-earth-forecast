@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import random
 from pathlib import Path
 import sys
-from typing import Any, Tuple
+from typing import Any, List, Sequence, Tuple
 
 import numpy as np
 
@@ -24,26 +25,18 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train temporal ERA5->PRISM CNN downscaler baseline")
-    parser.add_argument(
-        "--era5-path",
-        type=str,
-        default="data_raw/era5_georgia_temp.nc",
-        help="Path to ERA5 NetCDF file",
-    )
-    parser.add_argument(
-        "--prism-path",
-        type=str,
-        default="data_raw/prism",
-        help="Path to PRISM raster file or directory of daily rasters",
-    )
-    parser.add_argument("--history-length", type=int, default=3, help="Number of ERA5 timesteps [t-k+1 ... t]")
+    parser = argparse.ArgumentParser(description="Train ERA5->PRISM downscaling models (CNN or ConvLSTM)")
+    parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
+    parser.add_argument("--prism-path", type=str, default="data_raw/prism")
+    parser.add_argument("--model", type=str, choices=["cnn", "convlstm"], default="convlstm")
+    parser.add_argument("--history-length", type=int, default=5)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--hidden-channels", type=int, default=32, help="Hidden channels for ConvLSTM")
     parser.add_argument(
         "--device",
         type=str,
@@ -54,8 +47,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-out",
         type=str,
-        default="checkpoints/cnn_downscaler_best.pt",
-        help="Output path for best model checkpoint",
+        default=None,
+        help="Optional checkpoint output path. Defaults to checkpoints/<model>_best.pt",
+    )
+    parser.add_argument(
+        "--training-results-dir",
+        type=str,
+        default="results/training",
+        help="Directory for training curve CSV",
     )
     return parser.parse_args()
 
@@ -68,7 +67,7 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def resolve_device(device_arg: str) -> torch.device:
+def resolve_device(device_arg: str) -> Any:
     if device_arg == "cuda":
         return torch.device("cuda")
     if device_arg == "mps":
@@ -83,7 +82,7 @@ def resolve_device(device_arg: str) -> torch.device:
     return torch.device("cpu")
 
 
-def split_dataset(dataset: Any, val_fraction: float) -> Tuple[Any, Any]:
+def split_dataset(dataset: Any, val_fraction: float) -> Tuple[Any, Any, List[int], List[int]]:
     if not 0.0 < val_fraction < 1.0:
         raise ValueError("val_fraction must be between 0 and 1")
 
@@ -96,10 +95,42 @@ def split_dataset(dataset: Any, val_fraction: float) -> Tuple[Any, Any]:
         val_size = n_total - 1
 
     train_size = n_total - val_size
-    # Chronological split keeps this baseline deterministic and simple.
     train_indices = list(range(train_size))
     val_indices = list(range(train_size, n_total))
-    return Subset(dataset, train_indices), Subset(dataset, val_indices)
+    return (
+        Subset(dataset, train_indices),
+        Subset(dataset, val_indices),
+        train_indices,
+        val_indices,
+    )
+
+
+def build_model(args: argparse.Namespace, sample_x: Any, sample_y: Any) -> Tuple[Any, dict]:
+    from models.cnn_downscaler import CNNDownscaler
+    from models.convlstm_downscaler import ConvLSTMDownscaler
+
+    if args.model == "cnn":
+        in_channels = int(sample_x.shape[0] * sample_x.shape[1])
+        model = CNNDownscaler(in_channels=in_channels, out_channels=int(sample_y.shape[0]))
+        model_config = {
+            "in_channels": in_channels,
+            "out_channels": int(sample_y.shape[0]),
+            "base_channels": 32,
+        }
+        return model, model_config
+
+    model = ConvLSTMDownscaler(
+        input_channels=int(sample_x.shape[1]),
+        hidden_channels=int(args.hidden_channels),
+        out_channels=int(sample_y.shape[0]),
+    )
+    model_config = {
+        "input_channels": int(sample_x.shape[1]),
+        "hidden_channels": int(args.hidden_channels),
+        "out_channels": int(sample_y.shape[0]),
+        "kernel_size": 3,
+    }
+    return model, model_config
 
 
 def run_epoch(
@@ -131,6 +162,15 @@ def run_epoch(
     return running_loss / max(1, len(loader))
 
 
+def save_training_curve(curve_rows: Sequence[dict], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = ["epoch", "train_loss", "val_loss", "is_best"]
+    with output_path.open("w", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(curve_rows)
+
+
 def main() -> None:
     args = parse_args()
     if torch is None or nn is None or DataLoader is None or Subset is None:
@@ -139,11 +179,9 @@ def main() -> None:
         )
 
     from datasets.prism_dataset import ERA5_PRISM_Dataset
-    from models.cnn_downscaler import CNNDownscaler
 
     set_seed(args.seed)
     device = resolve_device(args.device)
-    print("Training started")
 
     era5_path = Path(args.era5_path)
     prism_path = Path(args.prism_path)
@@ -156,13 +194,20 @@ def main() -> None:
             f"PRISM path not found: {prism_path}. Run data_pipeline/download_prism.py first."
         )
 
-    print("Loading ERA5 and PRISM data")
+    checkpoint_path = Path(args.checkpoint_out) if args.checkpoint_out else Path(f"checkpoints/{args.model}_best.pt")
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
+    print("Training started")
+    print(f"Model: {args.model}")
+    print(f"History length: {args.history_length}")
+    print(f"Device: {device.type} | Seed: {args.seed}")
+
     dataset = ERA5_PRISM_Dataset(
         era5_path=str(era5_path),
         prism_path=str(prism_path),
         history_length=args.history_length,
     )
-    train_set, val_set = split_dataset(dataset, args.val_fraction)
+    train_set, val_set, train_indices, val_indices = split_dataset(dataset, args.val_fraction)
 
     train_loader = DataLoader(
         train_set,
@@ -178,22 +223,19 @@ def main() -> None:
     )
 
     sample_x, sample_y = dataset[0]
-    model = CNNDownscaler(in_channels=sample_x.shape[0], out_channels=sample_y.shape[0]).to(device)
+    model, model_config = build_model(args, sample_x, sample_y)
+    model = model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     criterion = nn.MSELoss()
-
-    checkpoint_path = Path(args.checkpoint_out)
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-
-    best_val_loss = float("inf")
 
     print(
         f"Dataset: total={len(dataset)} train={len(train_set)} val={len(val_set)} "
         f"input_shape={tuple(sample_x.shape)} target_shape={tuple(sample_y.shape)}"
     )
-    print(f"History length: {args.history_length}")
-    print(f"Device: {device.type} | Seed: {args.seed}")
+
+    best_val_loss = float("inf")
+    curve_rows: List[dict] = []
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
@@ -202,21 +244,29 @@ def main() -> None:
         improved = val_loss < best_val_loss
         if improved:
             best_val_loss = val_loss
-            # Keep one best checkpoint for reproducible evaluation.
             torch.save(
                 {
+                    "model_type": args.model,
                     "model_state_dict": model.state_dict(),
-                    "model_config": {
-                        "in_channels": sample_x.shape[0],
-                        "out_channels": sample_y.shape[0],
-                        "base_channels": 32,
-                    },
+                    "model_config": model_config,
                     "epoch": epoch,
                     "best_val_loss": best_val_loss,
+                    "history_length": int(args.history_length),
+                    "train_indices": train_indices,
+                    "val_indices": val_indices,
                     "args": vars(args),
                 },
                 checkpoint_path,
             )
+
+        curve_rows.append(
+            {
+                "epoch": epoch,
+                "train_loss": f"{train_loss:.8f}",
+                "val_loss": f"{val_loss:.8f}",
+                "is_best": int(improved),
+            }
+        )
 
         marker = "*" if improved else ""
         print(
@@ -224,7 +274,12 @@ def main() -> None:
             f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} {marker}"
         )
 
+    curves_dir = Path(args.training_results_dir)
+    curve_path = curves_dir / f"{args.model}_training_curve.csv"
+    save_training_curve(curve_rows, curve_path)
+
     print(f"Best checkpoint saved to: {checkpoint_path} (val_loss={best_val_loss:.6f})")
+    print(f"Training curve saved to: {curve_path}")
 
 
 if __name__ == "__main__":

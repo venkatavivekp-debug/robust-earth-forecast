@@ -1,22 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 from pathlib import Path
 import sys
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 try:
     import torch
-    import torch.nn.functional as F
-    from torch.utils.data import DataLoader
 except ModuleNotFoundError:
     torch = None
-    F = None
-    DataLoader = None
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -27,53 +24,35 @@ def _configure_plot_cache() -> None:
     cache_root = PROJECT_ROOT / ".cache"
     cache_root.mkdir(parents=True, exist_ok=True)
 
-    # Force headless-safe plotting on macOS/Linux terminals and CI.
     os.environ.setdefault("MPLBACKEND", "Agg")
     os.environ.setdefault("XDG_CACHE_HOME", str(cache_root))
     os.environ.setdefault("MPLCONFIGDIR", str(cache_root / "matplotlib"))
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate temporal ERA5->PRISM CNN downscaler")
+    parser = argparse.ArgumentParser(description="Evaluate ERA5->PRISM downscaling baselines and temporal models")
+    parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
+    parser.add_argument("--prism-path", type=str, default="data_raw/prism")
     parser.add_argument(
-        "--era5-path",
+        "--models",
         type=str,
-        default="data_raw/era5_georgia_temp.nc",
-        help="Path to ERA5 NetCDF file",
+        nargs="+",
+        default=["persistence", "linear", "cnn", "convlstm"],
+        choices=["persistence", "linear", "cnn", "convlstm"],
+        help="Models/baselines to evaluate",
     )
-    parser.add_argument(
-        "--prism-path",
-        type=str,
-        default="data_raw/prism",
-        help="Path to PRISM raster file or directory",
-    )
-    parser.add_argument(
-        "--checkpoint-path",
-        type=str,
-        default="checkpoints/cnn_downscaler_best.pt",
-        help="Path to trained model checkpoint",
-    )
-    parser.add_argument(
-        "--history-length",
-        type=int,
-        default=None,
-        help="Temporal history length; if omitted, inferred from checkpoint",
-    )
-    parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--num-samples", type=int, default=8, help="Max samples to evaluate")
-    parser.add_argument("--num-plots", type=int, default=1, help="Number of comparison plots to save")
+    parser.add_argument("--history-length", type=int, default=5)
+    parser.add_argument("--val-fraction", type=float, default=0.2)
+    parser.add_argument("--num-samples", type=int, default=8)
+    parser.add_argument("--cnn-checkpoint", type=str, default="checkpoints/cnn_best.pt")
+    parser.add_argument("--convlstm-checkpoint", type=str, default="checkpoints/convlstm_best.pt")
     parser.add_argument(
         "--device",
         type=str,
         default="auto",
         choices=["auto", "cpu", "cuda", "mps"],
     )
-    parser.add_argument(
-        "--results-dir",
-        type=str,
-        default="results/evaluation",
-        help="Directory for metrics and plots",
-    )
+    parser.add_argument("--results-dir", type=str, default="results/evaluation")
     return parser.parse_args()
 
 
@@ -92,93 +71,150 @@ def resolve_device(device_arg: str) -> Any:
     return torch.device("cpu")
 
 
-def load_model(checkpoint_path: Path, device: Any) -> Tuple[Any, int]:
+def split_indices(n_total: int, val_fraction: float) -> Tuple[List[int], List[int]]:
+    if n_total < 2:
+        raise ValueError("At least 2 samples are required to build train/validation splits")
+    if not 0.0 < val_fraction < 1.0:
+        raise ValueError("val_fraction must be between 0 and 1")
+
+    val_size = max(1, int(round(n_total * val_fraction)))
+    if val_size >= n_total:
+        val_size = n_total - 1
+    train_size = n_total - val_size
+
+    train_indices = list(range(train_size))
+    val_indices = list(range(train_size, n_total))
+    return train_indices, val_indices
+
+
+def load_checkpoint_model(model_name: str, checkpoint_path: Path, device: Any) -> Tuple[Any, int]:
     from models.cnn_downscaler import CNNDownscaler
+    from models.convlstm_downscaler import ConvLSTMDownscaler
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
-    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-        model_config = checkpoint.get("model_config", {})
-        in_channels = int(model_config.get("in_channels", 1))
+    if not isinstance(checkpoint, dict) or "model_state_dict" not in checkpoint:
+        raise RuntimeError(f"Unsupported checkpoint format for {checkpoint_path}")
+
+    model_config = checkpoint.get("model_config", {})
+    history_length = int(checkpoint.get("history_length", model_config.get("in_channels", 1)))
+
+    if model_name == "cnn":
         model = CNNDownscaler(
-            in_channels=in_channels,
+            in_channels=int(model_config.get("in_channels", history_length)),
             out_channels=int(model_config.get("out_channels", 1)),
             base_channels=int(model_config.get("base_channels", 32)),
         )
-        model.load_state_dict(checkpoint["model_state_dict"])
+    elif model_name == "convlstm":
+        model = ConvLSTMDownscaler(
+            input_channels=int(model_config.get("input_channels", 1)),
+            hidden_channels=int(model_config.get("hidden_channels", 32)),
+            out_channels=int(model_config.get("out_channels", 1)),
+            kernel_size=int(model_config.get("kernel_size", 3)),
+        )
     else:
-        model = CNNDownscaler()
-        model.load_state_dict(checkpoint)
-        in_channels = 1
+        raise ValueError(f"Unsupported checkpoint model type: {model_name}")
 
+    model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
     model.eval()
-    return model, in_channels
+    return model, history_length
+
+
+def compute_metrics(errors: Sequence[Dict[str, float]]) -> Dict[str, float]:
+    rmse = float(np.mean([row["rmse"] for row in errors]))
+    mae = float(np.mean([row["mae"] for row in errors]))
+    bias = float(np.mean([row["bias"] for row in errors]))
+    return {"rmse": rmse, "mae": mae, "bias": bias}
 
 
 def save_comparison_plot(
-    era5_input: Any,
-    prediction: Any,
-    target: Any,
+    era5_up: np.ndarray,
+    prediction: np.ndarray,
+    target: np.ndarray,
     output_path: Path,
     title: str,
 ) -> None:
     _configure_plot_cache()
     import matplotlib.pyplot as plt
 
-    # Temporal baseline visualization uses the most recent ERA5 frame at t.
-    era5_last = era5_input[-1].unsqueeze(0).unsqueeze(0)
-    era5_up = F.interpolate(
-        era5_last,
-        size=(target.shape[-2], target.shape[-1]),
-        mode="bilinear",
-        align_corners=False,
-    ).squeeze(0)
+    abs_error = np.abs(prediction - target)
 
-    era5_np = era5_up.squeeze().cpu().numpy()
-    pred_np = prediction.squeeze().cpu().numpy()
-    target_np = target.squeeze().cpu().numpy()
+    main_vmin = float(min(np.min(era5_up), np.min(prediction), np.min(target)))
+    main_vmax = float(max(np.max(era5_up), np.max(prediction), np.max(target)))
+    err_vmin = 0.0
+    err_vmax = float(np.max(abs_error))
 
-    vmin = float(min(np.min(era5_np), np.min(pred_np), np.min(target_np)))
-    vmax = float(max(np.max(era5_np), np.max(pred_np), np.max(target_np)))
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8), constrained_layout=True)
 
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True)
+    im0 = axes[0, 0].imshow(era5_up, cmap="coolwarm", vmin=main_vmin, vmax=main_vmax)
+    axes[0, 0].set_title("ERA5 Input (Upsampled)")
+    axes[0, 0].axis("off")
 
-    im0 = axes[0].imshow(era5_np, cmap="coolwarm", vmin=vmin, vmax=vmax)
-    axes[0].set_title("ERA5 t (Upsampled)")
-    axes[0].axis("off")
+    axes[0, 1].imshow(prediction, cmap="coolwarm", vmin=main_vmin, vmax=main_vmax)
+    axes[0, 1].set_title("Model Prediction")
+    axes[0, 1].axis("off")
 
-    axes[1].imshow(pred_np, cmap="coolwarm", vmin=vmin, vmax=vmax)
-    axes[1].set_title("CNN Prediction")
-    axes[1].axis("off")
+    axes[1, 0].imshow(target, cmap="coolwarm", vmin=main_vmin, vmax=main_vmax)
+    axes[1, 0].set_title("PRISM Target")
+    axes[1, 0].axis("off")
 
-    axes[2].imshow(target_np, cmap="coolwarm", vmin=vmin, vmax=vmax)
-    axes[2].set_title("PRISM Target")
-    axes[2].axis("off")
+    im3 = axes[1, 1].imshow(abs_error, cmap="magma", vmin=err_vmin, vmax=err_vmax)
+    axes[1, 1].set_title("Absolute Error")
+    axes[1, 1].axis("off")
 
+    fig.colorbar(im0, ax=[axes[0, 0], axes[0, 1], axes[1, 0]], shrink=0.82, label="Temperature (deg C)")
+    fig.colorbar(im3, ax=axes[1, 1], shrink=0.82, label="|Error| (deg C)")
     fig.suptitle(title)
-    fig.colorbar(im0, ax=axes, shrink=0.8, label="Temperature (deg C)")
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+
+
+def save_model_comparison(
+    era5_up: np.ndarray,
+    model_predictions: Dict[str, np.ndarray],
+    target: np.ndarray,
+    output_path: Path,
+    title: str,
+) -> None:
+    _configure_plot_cache()
+    import matplotlib.pyplot as plt
+
+    ordered_models = sorted(model_predictions.keys())
+    panels = ["ERA5 (Upsampled)"] + [f"{m}" for m in ordered_models] + ["PRISM Target"]
+    arrays = [era5_up] + [model_predictions[m] for m in ordered_models] + [target]
+
+    vmin = float(min(np.min(a) for a in arrays))
+    vmax = float(max(np.max(a) for a in arrays))
+
+    fig, axes = plt.subplots(1, len(arrays), figsize=(4 * len(arrays), 4), constrained_layout=True)
+    if len(arrays) == 1:
+        axes = [axes]
+
+    im = None
+    for ax, label, arr in zip(axes, panels, arrays):
+        im = ax.imshow(arr, cmap="coolwarm", vmin=vmin, vmax=vmax)
+        ax.set_title(label)
+        ax.axis("off")
+
+    fig.colorbar(im, ax=axes, shrink=0.85, label="Temperature (deg C)")
+    fig.suptitle(title)
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
 
 
 def main() -> None:
     args = parse_args()
-    if torch is None or F is None or DataLoader is None:
+    if torch is None:
         raise ModuleNotFoundError(
             "PyTorch is required to run evaluation. Install dependencies with: pip install -r requirements.txt"
         )
 
     from datasets.prism_dataset import ERA5_PRISM_Dataset
+    from models.baselines import fit_global_linear_baseline, upsample_latest_era5
 
-    results_dir = Path(args.results_dir)
-    results_dir.mkdir(parents=True, exist_ok=True)
-    print("Loading ERA5 and PRISM data for evaluation")
-
-    device = resolve_device(args.device)
     era5_path = Path(args.era5_path)
     prism_path = Path(args.prism_path)
-    checkpoint_path = Path(args.checkpoint_path)
 
     if not era5_path.exists():
         raise FileNotFoundError(
@@ -188,90 +224,146 @@ def main() -> None:
         raise FileNotFoundError(
             f"PRISM path not found: {prism_path}. Run data_pipeline/download_prism.py first."
         )
-    if not checkpoint_path.exists():
-        raise FileNotFoundError(
-            f"Checkpoint not found: {checkpoint_path}. Run training/train_downscaler.py first."
-        )
 
-    model, checkpoint_history = load_model(checkpoint_path, device)
-    history_length = args.history_length if args.history_length is not None else checkpoint_history
+    device = resolve_device(args.device)
+    results_root = Path(args.results_dir)
+    results_root.mkdir(parents=True, exist_ok=True)
 
+    print("Loading ERA5 and PRISM data")
     dataset = ERA5_PRISM_Dataset(
-        str(era5_path),
-        str(prism_path),
-        history_length=history_length,
+        era5_path=str(era5_path),
+        prism_path=str(prism_path),
+        history_length=args.history_length,
     )
 
-    if len(dataset) < 1:
-        raise RuntimeError("No samples available for evaluation")
+    train_indices, val_indices = split_indices(len(dataset), args.val_fraction)
+    eval_indices = val_indices[: max(1, min(args.num_samples, len(val_indices)))]
 
-    sample_x, _ = dataset[0]
-    if sample_x.shape[0] != checkpoint_history:
-        raise RuntimeError(
-            f"History mismatch: dataset uses {sample_x.shape[0]} channels but checkpoint expects {checkpoint_history}. "
-            "Use --history-length to match training configuration."
-        )
+    linear_model = None
+    if "linear" in args.models:
+        print("Fitting linear baseline on training split")
+        linear_model = fit_global_linear_baseline(dataset, train_indices)
+        print(f"Linear baseline coefficients: slope={linear_model.slope:.6f}, intercept={linear_model.intercept:.6f}")
 
-    n_eval = min(args.num_samples, len(dataset))
-    eval_indices = list(range(n_eval))
-    eval_subset = torch.utils.data.Subset(dataset, eval_indices)
-    loader = DataLoader(eval_subset, batch_size=args.batch_size, shuffle=False)
-
-    rmse_values: List[float] = []
-    mae_values: List[float] = []
-    plots_saved = 0
-    global_index = 0
-
-    with torch.no_grad():
-        for x, y in loader:
-            x = x.to(device)
-            y = y.to(device)
-
-            pred = model(x, target_size=(y.shape[-2], y.shape[-1]))
-
-            sample_rmse = torch.sqrt(torch.mean((pred - y) ** 2, dim=(1, 2, 3)))
-            sample_mae = torch.mean(torch.abs(pred - y), dim=(1, 2, 3))
-
-            rmse_values.extend(sample_rmse.cpu().tolist())
-            mae_values.extend(sample_mae.cpu().tolist())
-
-            for i in range(x.shape[0]):
-                if global_index >= n_eval:
-                    break
-
-                if plots_saved < args.num_plots:
-                    date = dataset.metadata(eval_indices[global_index]).date
-                    plot_path = results_dir / f"comparison_{plots_saved + 1}_{date.strftime('%Y%m%d')}.png"
-
-                    save_comparison_plot(
-                        era5_input=x[i].cpu(),
-                        prediction=pred[i].cpu(),
-                        target=y[i].cpu(),
-                        output_path=plot_path,
-                        title=f"Temporal ERA5->PRISM | {date.date()} | history={history_length}",
-                    )
-                    plots_saved += 1
-
-                global_index += 1
-
-    metrics: Dict[str, object] = {
-        "rmse": float(np.mean(rmse_values)),
-        "mae": float(np.mean(mae_values)),
-        "num_samples": int(n_eval),
-        "history_length": int(history_length),
+    learned_models: Dict[str, Any] = {}
+    checkpoint_paths = {
+        "cnn": Path(args.cnn_checkpoint),
+        "convlstm": Path(args.convlstm_checkpoint),
     }
 
-    print("Saving evaluation results")
-    metrics_path = results_dir / "metrics.json"
-    metrics_path.write_text(json.dumps(metrics, indent=2))
+    for model_name in [m for m in args.models if m in ("cnn", "convlstm")]:
+        ckpt_path = checkpoint_paths[model_name]
+        if not ckpt_path.exists():
+            print(f"Skipping {model_name}: checkpoint not found at {ckpt_path}")
+            continue
 
-    print(f"Evaluated samples: {n_eval}")
-    print(f"History length: {history_length}")
-    print(f"RMSE: {metrics['rmse']:.4f}")
-    print(f"MAE: {metrics['mae']:.4f}")
-    print(f"Metrics saved to: {metrics_path}")
-    if plots_saved:
-        print(f"Saved {plots_saved} comparison plot(s) under: {results_dir}")
+        model, ckpt_history = load_checkpoint_model(model_name, ckpt_path, device)
+        if ckpt_history != args.history_length:
+            print(
+                f"Skipping {model_name}: checkpoint history_length={ckpt_history} does not match requested {args.history_length}"
+            )
+            continue
+        learned_models[model_name] = model
+
+    model_metrics_rows: List[Dict[str, Any]] = []
+    comparison_predictions: Dict[str, np.ndarray] = {}
+    comparison_era5: Optional[np.ndarray] = None
+    comparison_target: Optional[np.ndarray] = None
+    comparison_date: Optional[str] = None
+
+    for model_name in args.models:
+        if model_name in ("cnn", "convlstm") and model_name not in learned_models:
+            continue
+
+        errors: List[Dict[str, float]] = []
+        saved_plot = False
+
+        model_dir = results_root / model_name
+        model_dir.mkdir(parents=True, exist_ok=True)
+
+        with torch.no_grad():
+            for sample_idx in eval_indices:
+                x, y = dataset[sample_idx]
+                x = x.unsqueeze(0).to(device)
+                y = y.unsqueeze(0).to(device)
+
+                if model_name == "persistence":
+                    pred = upsample_latest_era5(x, target_size=(y.shape[-2], y.shape[-1]))
+                elif model_name == "linear":
+                    if linear_model is None:
+                        raise RuntimeError("Linear baseline requested but not fitted")
+                    pred = linear_model.predict(x, target_size=(y.shape[-2], y.shape[-1]))
+                else:
+                    pred = learned_models[model_name](x, target_size=(y.shape[-2], y.shape[-1]))
+
+                err = pred - y
+                rmse = float(torch.sqrt(torch.mean(err ** 2)).item())
+                mae = float(torch.mean(torch.abs(err)).item())
+                bias = float(torch.mean(err).item())
+                errors.append({"rmse": rmse, "mae": mae, "bias": bias})
+
+                if not saved_plot:
+                    date = dataset.metadata(sample_idx).date.strftime("%Y%m%d")
+                    era5_up = upsample_latest_era5(x, target_size=(y.shape[-2], y.shape[-1])).squeeze().cpu().numpy()
+                    pred_np = pred.squeeze().cpu().numpy()
+                    target_np = y.squeeze().cpu().numpy()
+
+                    plot_path = model_dir / f"comparison_1_{date}.png"
+                    save_comparison_plot(
+                        era5_up=era5_up,
+                        prediction=pred_np,
+                        target=target_np,
+                        output_path=plot_path,
+                        title=f"{model_name.upper()} | ERA5->PRISM | {date} | history={args.history_length}",
+                    )
+                    saved_plot = True
+
+                    comparison_predictions[model_name] = pred_np
+                    comparison_era5 = era5_up
+                    comparison_target = target_np
+                    comparison_date = date
+
+        if not errors:
+            continue
+
+        summary = compute_metrics(errors)
+        summary.update(
+            {
+                "model": model_name,
+                "num_samples": len(errors),
+                "history_length": int(args.history_length),
+            }
+        )
+        model_metrics_rows.append(summary)
+
+        metrics_path = model_dir / "metrics.json"
+        metrics_path.write_text(json.dumps(summary, indent=2))
+        print(
+            f"{model_name:>11} | RMSE={summary['rmse']:.4f} "
+            f"MAE={summary['mae']:.4f} BIAS={summary['bias']:.4f}"
+        )
+
+    if not model_metrics_rows:
+        raise RuntimeError("No models were evaluated. Provide valid checkpoints or baseline selections.")
+
+    summary_csv = results_root / "metrics_summary.csv"
+    with summary_csv.open("w", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=["model", "rmse", "mae", "bias", "num_samples", "history_length"])
+        writer.writeheader()
+        writer.writerows(model_metrics_rows)
+
+    if comparison_era5 is not None and comparison_target is not None and comparison_predictions:
+        comparison_plot = results_root / "model_comparison.png"
+        save_model_comparison(
+            era5_up=comparison_era5,
+            model_predictions=comparison_predictions,
+            target=comparison_target,
+            output_path=comparison_plot,
+            title=f"Model Comparison | ERA5->PRISM | {comparison_date}",
+        )
+
+    print(f"Saved evaluation summary CSV: {summary_csv}")
+    print(f"Saved evaluation outputs under: {results_root}")
 
 
 if __name__ == "__main__":
