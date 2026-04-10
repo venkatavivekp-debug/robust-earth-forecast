@@ -35,6 +35,7 @@ results/evaluation/*
 !results/evaluation/cnn/
 !results/evaluation/cnn/comparison_1_20230101.png
 !results/evaluation/cnn/metrics.json
+!results/evaluation/baselines_summary.csv
 
 # Training curves are generated locally
 results/training/*

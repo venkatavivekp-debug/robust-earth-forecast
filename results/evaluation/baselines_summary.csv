@@ -1,0 +1,2 @@
+model,rmse,mae,bias,num_samples,history_length
+cnn,14.546989758809408,14.394099553426107,nan,3,3
