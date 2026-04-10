@@ -71,7 +71,8 @@ Current interpretation:
 
 - ERA5 structure is captured at large scales.
 - Fine spatial structure remains harder to recover.
-- ConvLSTM is expected to help when enough aligned temporal samples are available.
+- ConvLSTM should be compared directly against CNN using `baselines_summary.csv` and per-model metrics when ConvLSTM outputs are present.
+- In small local runs, data volume and temporal coverage can limit the observed gain.
 
 ## Limitations
 
