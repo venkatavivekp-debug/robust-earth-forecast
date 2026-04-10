@@ -105,6 +105,30 @@ def split_dataset(dataset: Any, val_fraction: float) -> Tuple[Any, Any, List[int
     )
 
 
+def recommended_prism_days(history_length: int, min_samples: int) -> int:
+    # Usable samples are roughly: n_dates - history_length + 1
+    minimum_dates = history_length + min_samples - 1
+    return max(10, minimum_dates + 2)
+
+
+def build_insufficient_samples_message(
+    *,
+    history_length: int,
+    usable_samples: int,
+    min_required: int,
+    candidate_dates: int,
+) -> str:
+    suggested_days = recommended_prism_days(history_length, min_required)
+    return (
+        f"History length {history_length} produced only {usable_samples} usable sample(s). "
+        f"At least {min_required} are required for train/validation split. "
+        f"Candidate PRISM dates scanned: {candidate_dates}. "
+        "Download more aligned PRISM/ERA5 dates, for example:\n"
+        f"  python data_pipeline/download_prism.py --start-date 20230101 --days {suggested_days} --variable tmean\n"
+        "  python data_pipeline/download_era5_georgia.py --year 2023 --month 1 --overwrite"
+    )
+
+
 def build_model(args: argparse.Namespace, sample_x: Any, sample_y: Any) -> Tuple[Any, dict]:
     from models.cnn_downscaler import CNNDownscaler
     from models.convlstm_downscaler import ConvLSTMDownscaler
@@ -207,6 +231,24 @@ def main() -> None:
         prism_path=str(prism_path),
         history_length=args.history_length,
     )
+    stats = getattr(dataset, "summary_stats", {})
+    candidate_dates = int(stats.get("candidate_dates", len(dataset)))
+    usable_samples = len(dataset)
+    print(
+        "Dataset alignment summary: "
+        f"candidate_dates={candidate_dates} usable_samples={usable_samples} "
+        f"history_length={args.history_length}"
+    )
+    if usable_samples < 2:
+        raise RuntimeError(
+            build_insufficient_samples_message(
+                history_length=args.history_length,
+                usable_samples=usable_samples,
+                min_required=2,
+                candidate_dates=candidate_dates,
+            )
+        )
+
     train_set, val_set, train_indices, val_indices = split_dataset(dataset, args.val_fraction)
 
     train_loader = DataLoader(

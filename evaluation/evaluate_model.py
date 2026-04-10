@@ -87,6 +87,29 @@ def split_indices(n_total: int, val_fraction: float) -> Tuple[List[int], List[in
     return train_indices, val_indices
 
 
+def recommended_prism_days(history_length: int, min_samples: int) -> int:
+    minimum_dates = history_length + min_samples - 1
+    return max(10, minimum_dates + 2)
+
+
+def build_insufficient_samples_message(
+    *,
+    history_length: int,
+    usable_samples: int,
+    min_required: int,
+    candidate_dates: int,
+) -> str:
+    suggested_days = recommended_prism_days(history_length, min_required)
+    return (
+        f"History length {history_length} produced only {usable_samples} usable sample(s). "
+        f"At least {min_required} are required for train/validation split. "
+        f"Candidate PRISM dates scanned: {candidate_dates}. "
+        "Download more aligned PRISM/ERA5 dates, for example:\n"
+        f"  python data_pipeline/download_prism.py --start-date 20230101 --days {suggested_days} --variable tmean\n"
+        "  python data_pipeline/download_era5_georgia.py --year 2023 --month 1 --overwrite"
+    )
+
+
 def load_checkpoint_model(model_name: str, checkpoint_path: Path, device: Any) -> Tuple[Any, int]:
     from models.cnn_downscaler import CNNDownscaler
     from models.convlstm_downscaler import ConvLSTMDownscaler
@@ -235,6 +258,23 @@ def main() -> None:
         prism_path=str(prism_path),
         history_length=args.history_length,
     )
+    stats = getattr(dataset, "summary_stats", {})
+    candidate_dates = int(stats.get("candidate_dates", len(dataset)))
+    usable_samples = len(dataset)
+    print(
+        "Dataset alignment summary: "
+        f"candidate_dates={candidate_dates} usable_samples={usable_samples} "
+        f"history_length={args.history_length}"
+    )
+    if usable_samples < 2:
+        raise RuntimeError(
+            build_insufficient_samples_message(
+                history_length=args.history_length,
+                usable_samples=usable_samples,
+                min_required=2,
+                candidate_dates=candidate_dates,
+            )
+        )
 
     train_indices, val_indices = split_indices(len(dataset), args.val_fraction)
     eval_indices = val_indices[: max(1, min(args.num_samples, len(val_indices)))]
@@ -346,7 +386,7 @@ def main() -> None:
     if not model_metrics_rows:
         raise RuntimeError("No models were evaluated. Provide valid checkpoints or baseline selections.")
 
-    summary_csv = results_root / "metrics_summary.csv"
+    summary_csv = results_root / "baselines_summary.csv"
     with summary_csv.open("w", newline="") as fp:
         writer = csv.DictWriter(fp, fieldnames=["model", "rmse", "mae", "bias", "num_samples", "history_length"])
         writer.writeheader()
