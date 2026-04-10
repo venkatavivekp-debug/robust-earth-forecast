@@ -87,10 +87,16 @@ Current interpretation:
 
 ConvLSTM is a standard spatiotemporal sequence model and is used here as the main temporal baseline. Modern weather ML systems (such as FourCastNet, GraphCast, and Prithvi WxC) motivate the emphasis on temporal dynamics. This repository focuses on a smaller regional downscaling setup rather than reproducing large global models.
 
-## Future Direction
+## Current Observation
 
-- longer temporal windows
-- more ERA5 variables
-- multi-source inputs (remote sensing, drone imagery, terrain)
-- uncertainty-aware forecasting objectives
-- stronger temporal architectures after expanding stable data coverage
+With limited temporal coverage, simple baselines outperform deep models.  
+This indicates that model capacity is not the bottleneck — data availability is.
+
+## Direction
+
+The pipeline is structured to move toward:
+
+- temporal modeling at larger scale
+- multi-variable ERA5 inputs
+- multi-source geospatial data
+- uncertainty-aware prediction
