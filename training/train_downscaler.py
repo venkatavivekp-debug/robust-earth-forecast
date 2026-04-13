@@ -5,7 +5,7 @@ import csv
 import random
 from pathlib import Path
 import sys
-from typing import Any, List, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -33,7 +33,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--weight-decay", type=float, default=1e-5)
+    parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--val-fraction", type=float, default=0.2)
+    parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--hidden-channels", type=int, default=32, help="Hidden channels for ConvLSTM")
@@ -82,7 +85,7 @@ def resolve_device(device_arg: str) -> Any:
     return torch.device("cpu")
 
 
-def split_dataset(dataset: Any, val_fraction: float) -> Tuple[Any, Any, List[int], List[int]]:
+def split_dataset(dataset: Any, val_fraction: float, split_seed: int) -> Tuple[Any, Any, List[int], List[int]]:
     if not 0.0 < val_fraction < 1.0:
         raise ValueError("val_fraction must be between 0 and 1")
 
@@ -94,9 +97,12 @@ def split_dataset(dataset: Any, val_fraction: float) -> Tuple[Any, Any, List[int
     if val_size >= n_total:
         val_size = n_total - 1
 
-    train_size = n_total - val_size
-    train_indices = list(range(train_size))
-    val_indices = list(range(train_size, n_total))
+    all_indices = np.arange(n_total)
+    rng = np.random.default_rng(split_seed)
+    rng.shuffle(all_indices)
+
+    val_indices = sorted(all_indices[:val_size].tolist())
+    train_indices = sorted(all_indices[val_size:].tolist())
     return (
         Subset(dataset, train_indices),
         Subset(dataset, val_indices),
@@ -157,6 +163,48 @@ def build_model(args: argparse.Namespace, sample_x: Any, sample_y: Any) -> Tuple
     return model, model_config
 
 
+def compute_input_stats(dataset: Any, indices: Sequence[int]) -> Tuple[np.ndarray, np.ndarray]:
+    if not indices:
+        raise ValueError("Cannot compute input normalization stats with empty indices")
+
+    sample_x, _ = dataset[int(indices[0])]
+    if sample_x.dim() != 4:
+        raise ValueError(f"Expected sample input shape [T, C, H, W], got {tuple(sample_x.shape)}")
+
+    channel_count = int(sample_x.shape[1])
+    sum_x = np.zeros(channel_count, dtype=np.float64)
+    sum_x2 = np.zeros(channel_count, dtype=np.float64)
+    n_values = 0
+
+    for idx in indices:
+        x, _ = dataset[int(idx)]
+        x_np = x.numpy().astype(np.float64)
+        x_flat = np.transpose(x_np, (1, 0, 2, 3)).reshape(channel_count, -1)
+        sum_x += x_flat.sum(axis=1)
+        sum_x2 += (x_flat ** 2).sum(axis=1)
+        n_values += x_flat.shape[1]
+
+    mean = sum_x / max(1, n_values)
+    var = np.maximum((sum_x2 / max(1, n_values)) - (mean ** 2), 1e-6)
+    std = np.sqrt(var)
+    return mean.astype(np.float32), std.astype(np.float32)
+
+
+def normalize_input_batch(
+    x: torch.Tensor,
+    mean: Optional[torch.Tensor],
+    std: Optional[torch.Tensor],
+) -> torch.Tensor:
+    if mean is None or std is None:
+        return x
+
+    if x.dim() == 5:
+        return (x - mean.view(1, 1, -1, 1, 1)) / std.view(1, 1, -1, 1, 1)
+    if x.dim() == 4:
+        return (x - mean.view(1, -1, 1, 1)) / std.view(1, -1, 1, 1)
+    raise ValueError(f"Unsupported input tensor shape for normalization: {tuple(x.shape)}")
+
+
 def run_epoch(
     model: Any,
     loader: Any,
@@ -164,6 +212,9 @@ def run_epoch(
     optimizer: Any,
     device: Any,
     train: bool,
+    input_mean: Optional[torch.Tensor],
+    input_std: Optional[torch.Tensor],
+    grad_clip: Optional[float],
 ) -> float:
     model.train(mode=train)
     running_loss = 0.0
@@ -171,14 +222,17 @@ def run_epoch(
     for x, y in loader:
         x = x.to(device)
         y = y.to(device)
+        x_model = normalize_input_batch(x, input_mean, input_std)
 
         with torch.set_grad_enabled(train):
-            preds = model(x, target_size=(y.shape[-2], y.shape[-1]))
+            preds = model(x_model, target_size=(y.shape[-2], y.shape[-1]))
             loss = criterion(preds, y)
 
             if train:
                 optimizer.zero_grad()
                 loss.backward()
+                if grad_clip is not None and grad_clip > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float(grad_clip))
                 optimizer.step()
 
         running_loss += float(loss.item())
@@ -249,7 +303,11 @@ def main() -> None:
             )
         )
 
-    train_set, val_set, train_indices, val_indices = split_dataset(dataset, args.val_fraction)
+    train_set, val_set, train_indices, val_indices = split_dataset(dataset, args.val_fraction, args.split_seed)
+
+    input_mean_np, input_std_np = compute_input_stats(dataset, train_indices)
+    input_mean = torch.tensor(input_mean_np, device=device)
+    input_std = torch.tensor(input_std_np, device=device)
 
     train_loader = DataLoader(
         train_set,
@@ -268,20 +326,46 @@ def main() -> None:
     model, model_config = build_model(args, sample_x, sample_y)
     model = model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay,
+    )
     criterion = nn.MSELoss()
 
     print(
         f"Dataset: total={len(dataset)} train={len(train_set)} val={len(val_set)} "
         f"input_shape={tuple(sample_x.shape)} target_shape={tuple(sample_y.shape)}"
     )
+    print(f"Input normalization mean={input_mean_np.tolist()} std={input_std_np.tolist()}")
+    print(f"Optimizer: Adam lr={args.learning_rate} weight_decay={args.weight_decay} grad_clip={args.grad_clip}")
 
     best_val_loss = float("inf")
     curve_rows: List[dict] = []
 
     for epoch in range(1, args.epochs + 1):
-        train_loss = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
-        val_loss = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
+        train_loss = run_epoch(
+            model,
+            train_loader,
+            criterion,
+            optimizer,
+            device,
+            train=True,
+            input_mean=input_mean,
+            input_std=input_std,
+            grad_clip=args.grad_clip,
+        )
+        val_loss = run_epoch(
+            model,
+            val_loader,
+            criterion,
+            optimizer,
+            device,
+            train=False,
+            input_mean=input_mean,
+            input_std=input_std,
+            grad_clip=args.grad_clip,
+        )
 
         improved = val_loss < best_val_loss
         if improved:
@@ -296,6 +380,10 @@ def main() -> None:
                     "history_length": int(args.history_length),
                     "train_indices": train_indices,
                     "val_indices": val_indices,
+                    "input_norm": {
+                        "mean": input_mean_np.tolist(),
+                        "std": input_std_np.tolist(),
+                    },
                     "args": vars(args),
                 },
                 checkpoint_path,

@@ -47,6 +47,7 @@ class ConvLSTMDownscaler(nn.Module):
         super().__init__()
         self.input_channels = input_channels
         self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
 
         self.convlstm = ConvLSTMCell(input_channels=input_channels, hidden_channels=hidden_channels, kernel_size=kernel_size)
 
@@ -74,4 +75,10 @@ class ConvLSTMDownscaler(nn.Module):
             target_size = (h * 4, w * 4)
 
         upsampled = F.interpolate(h_state, size=target_size, mode="bilinear", align_corners=False)
-        return self.readout(upsampled)
+        residual = self.readout(upsampled)
+
+        if self.out_channels == 1:
+            base = F.interpolate(x[:, -1, 0:1], size=target_size, mode="bilinear", align_corners=False)
+            return base + residual
+
+        return residual

@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--history-length", type=int, default=5)
     parser.add_argument("--val-fraction", type=float, default=0.2)
+    parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--num-samples", type=int, default=8)
     parser.add_argument("--cnn-checkpoint", type=str, default="checkpoints/cnn_best.pt")
     parser.add_argument("--convlstm-checkpoint", type=str, default="checkpoints/convlstm_best.pt")
@@ -71,7 +72,7 @@ def resolve_device(device_arg: str) -> Any:
     return torch.device("cpu")
 
 
-def split_indices(n_total: int, val_fraction: float) -> Tuple[List[int], List[int]]:
+def split_indices(n_total: int, val_fraction: float, split_seed: int) -> Tuple[List[int], List[int]]:
     if n_total < 2:
         raise ValueError("At least 2 samples are required to build train/validation splits")
     if not 0.0 < val_fraction < 1.0:
@@ -80,10 +81,12 @@ def split_indices(n_total: int, val_fraction: float) -> Tuple[List[int], List[in
     val_size = max(1, int(round(n_total * val_fraction)))
     if val_size >= n_total:
         val_size = n_total - 1
-    train_size = n_total - val_size
 
-    train_indices = list(range(train_size))
-    val_indices = list(range(train_size, n_total))
+    all_indices = np.arange(n_total)
+    rng = np.random.default_rng(split_seed)
+    rng.shuffle(all_indices)
+    val_indices = sorted(all_indices[:val_size].tolist())
+    train_indices = sorted(all_indices[val_size:].tolist())
     return train_indices, val_indices
 
 
@@ -110,7 +113,7 @@ def build_insufficient_samples_message(
     )
 
 
-def load_checkpoint_model(model_name: str, checkpoint_path: Path, device: Any) -> Tuple[Any, int]:
+def load_checkpoint_model(model_name: str, checkpoint_path: Path, device: Any) -> Tuple[Any, int, Optional[Dict[str, List[float]]]]:
     from models.cnn_downscaler import CNNDownscaler
     from models.convlstm_downscaler import ConvLSTMDownscaler
 
@@ -141,7 +144,30 @@ def load_checkpoint_model(model_name: str, checkpoint_path: Path, device: Any) -
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
     model.eval()
-    return model, history_length
+    input_norm = checkpoint.get("input_norm")
+    return model, history_length, input_norm
+
+
+def normalize_input_batch(
+    x: torch.Tensor,
+    input_norm: Optional[Dict[str, List[float]]],
+) -> torch.Tensor:
+    if not input_norm:
+        return x
+
+    mean_vals = input_norm.get("mean")
+    std_vals = input_norm.get("std")
+    if not mean_vals or not std_vals:
+        return x
+
+    mean = torch.tensor(mean_vals, device=x.device, dtype=x.dtype).clamp(min=-1e6, max=1e6)
+    std = torch.tensor(std_vals, device=x.device, dtype=x.dtype).clamp(min=1e-6, max=1e6)
+
+    if x.dim() == 5:
+        return (x - mean.view(1, 1, -1, 1, 1)) / std.view(1, 1, -1, 1, 1)
+    if x.dim() == 4:
+        return (x - mean.view(1, -1, 1, 1)) / std.view(1, -1, 1, 1)
+    return x
 
 
 def compute_metrics(errors: Sequence[Dict[str, float]]) -> Dict[str, float]:
@@ -276,7 +302,7 @@ def main() -> None:
             )
         )
 
-    train_indices, val_indices = split_indices(len(dataset), args.val_fraction)
+    train_indices, val_indices = split_indices(len(dataset), args.val_fraction, args.split_seed)
     eval_indices = val_indices[: max(1, min(args.num_samples, len(val_indices)))]
 
     linear_model = None
@@ -285,7 +311,7 @@ def main() -> None:
         linear_model = fit_global_linear_baseline(dataset, train_indices)
         print(f"Linear baseline coefficients: slope={linear_model.slope:.6f}, intercept={linear_model.intercept:.6f}")
 
-    learned_models: Dict[str, Any] = {}
+    learned_models: Dict[str, Tuple[Any, Optional[Dict[str, List[float]]]]] = {}
     checkpoint_paths = {
         "cnn": Path(args.cnn_checkpoint),
         "convlstm": Path(args.convlstm_checkpoint),
@@ -297,13 +323,13 @@ def main() -> None:
             print(f"Skipping {model_name}: checkpoint not found at {ckpt_path}")
             continue
 
-        model, ckpt_history = load_checkpoint_model(model_name, ckpt_path, device)
+        model, ckpt_history, input_norm = load_checkpoint_model(model_name, ckpt_path, device)
         if ckpt_history != args.history_length:
             print(
                 f"Skipping {model_name}: checkpoint history_length={ckpt_history} does not match requested {args.history_length}"
             )
             continue
-        learned_models[model_name] = model
+        learned_models[model_name] = (model, input_norm)
 
     model_metrics_rows: List[Dict[str, Any]] = []
     comparison_predictions: Dict[str, np.ndarray] = {}
@@ -334,7 +360,11 @@ def main() -> None:
                         raise RuntimeError("Linear baseline requested but not fitted")
                     pred = linear_model.predict(x, target_size=(y.shape[-2], y.shape[-1]))
                 else:
-                    pred = learned_models[model_name](x, target_size=(y.shape[-2], y.shape[-1]))
+                    model, input_norm = learned_models[model_name]
+                    pred = model(
+                        normalize_input_batch(x, input_norm),
+                        target_size=(y.shape[-2], y.shape[-1]),
+                    )
 
                 err = pred - y
                 rmse = float(torch.sqrt(torch.mean(err ** 2)).item())
