@@ -1,23 +1,23 @@
 # Robust Earth Forecast
 
-ERA5 to PRISM downscaling over Georgia with multi-variable inputs, classical baselines, and temporal deep learning.
+ERA5 to PRISM regional downscaling over Georgia with multi-variable inputs and temporal modeling.
 
 ## Problem
 
-ERA5 has coarse spatial resolution. PRISM provides finer regional temperature fields. The target mapping is:
+ERA5 is coarse in space. PRISM is finer in space. The task is to learn:
 
 `ERA5(t-k+1 ... t) -> PRISM(t)`
 
 ## Approach
 
-Models in this pipeline:
+Models used in this pipeline:
 
 - persistence baseline
 - global linear baseline
 - CNN baseline
 - ConvLSTM temporal model
 
-ERA5 input channels are:
+ERA5 input channels:
 
 - `2m_temperature`
 - `10m_u_component_of_wind`
@@ -31,7 +31,13 @@ Using only temperature was limiting. Adding wind and pressure improved the model
 - `data_raw/era5_georgia_temp.nc`
 - `data_raw/prism/` with dated rasters (`.bil`, `.tif`, `.tiff`, `.asc`)
 
-Temporal models need enough consecutive dates. For `history-length=3`, use at least 20-30 PRISM days for a stable run.
+For temporal runs, use at least 20-30 consecutive PRISM dates.
+
+## Temporal Extension
+
+The primary temporal experiment now uses `history-length=6` (instead of 3) to give ConvLSTM longer context.
+
+ConvLSTM becomes more competitive as temporal context increases, but still depends heavily on data size.
 
 ## Run
 
@@ -45,47 +51,53 @@ pip install -r requirements.txt
 python data_pipeline/download_era5_georgia.py --year 2023 --month 1
 python data_pipeline/download_prism.py --start-date 20230101 --days 30 --variable tmean
 
-python training/train_downscaler.py --model cnn --history-length 3 --epochs 25 --learning-rate 1e-3 --split-seed 42
-python training/train_downscaler.py --model convlstm --history-length 3 --epochs 40 --learning-rate 3e-4 --split-seed 42
+python training/train_downscaler.py --model cnn --history-length 6 --epochs 30 --learning-rate 1e-3 --split-seed 42 --grad-clip 1.0
+python training/train_downscaler.py --model convlstm --history-length 6 --epochs 40 --learning-rate 3e-4 --split-seed 42 --grad-clip 1.0
 
-python evaluation/evaluate_model.py --models persistence linear cnn convlstm --history-length 3 --num-samples 8 --split-seed 42
+python evaluation/evaluate_model.py --models persistence linear cnn convlstm --history-length 6 --num-samples 8 --split-seed 42
 
 jupyter notebook notebooks/era5_prism_downscaling.ipynb
+```
+
+Optional secondary check:
+
+```bash
+python training/train_downscaler.py --model convlstm --history-length 8 --epochs 30 --learning-rate 3e-4 --split-seed 42 --grad-clip 1.0 --checkpoint-out checkpoints/convlstm_h8_best.pt
 ```
 
 ## Results
 
 ![Model Comparison](results/evaluation/model_comparison.png)
 
-Latest metrics (`results/evaluation/baselines_summary.csv`):
+Latest history-6 metrics (`results/evaluation/baselines_summary.csv`):
 
-- persistence: RMSE 3.251, MAE 2.611
-- linear: RMSE 2.965, MAE 2.605
-- cnn: RMSE 3.974, MAE 3.446
-- convlstm: RMSE 3.098, MAE 2.513
+- persistence: RMSE 3.993, MAE 3.316
+- linear: RMSE 3.285, MAE 2.835
+- cnn: RMSE 4.017, MAE 3.432
+- convlstm: RMSE 3.011, MAE 2.660
 
-ConvLSTM training is now much more stable than before and clearly better than the CNN run in this setup, while linear remains strongest on this data slice.
+ConvLSTM is now the strongest learned model on this split and slightly better than linear in RMSE/MAE.
 
 ## Current Observation
 
-Simple baselines remain strong under limited data.
-Temporal models need enough dates and careful optimization.
-The multi-variable setup is a stronger base than the earlier temperature-only version.
+Simple baselines stay strong on small regional datasets.
+Temporal context helps ConvLSTM when training is stable and the window is long enough.
+The multi-variable setup is a stronger foundation than the earlier temperature-only version.
 
 ## Limitations
 
 - one region (Georgia)
-- short temporal coverage compared with operational systems
+- short overall time range
 - one target variable (temperature)
-- deep models remain data-sensitive
+- deep models are still sensitive to sample count
 
 ## Relation to Existing Work
 
-ConvLSTM is a standard temporal model for sequence-conditioned spatial prediction. This repository focuses on a smaller regional downscaling problem and does not attempt to reproduce large global weather systems.
+ConvLSTM is a standard temporal model for sequence-conditioned spatial prediction. This repository stays focused on a small regional downscaling setup rather than large global weather systems.
 
 ## Direction
 
-- longer temporal windows
+- longer temporal windows with larger date ranges
 - more ERA5 variables
 - multi-source geospatial inputs
 - uncertainty-aware forecasting
