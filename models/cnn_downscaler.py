@@ -11,11 +11,11 @@ class CNNDownscaler(nn.Module):
     """Spatial CNN baseline for ERA5 -> PRISM downscaling.
 
     Accepts either:
-    - [B, T, 1, H, W] (temporal windows) or
+    - [B, T, C, H, W] (temporal windows) or
     - [B, C, H, W] (already channel-stacked)
     """
 
-    def __init__(self, in_channels: int = 1, out_channels: int = 1, base_channels: int = 32) -> None:
+    def __init__(self, in_channels: int = 4, out_channels: int = 1, base_channels: int = 32) -> None:
         super().__init__()
 
         self.encoder = nn.Sequential(

@@ -10,9 +10,9 @@ import torch.nn.functional as F
 def upsample_latest_era5(x: torch.Tensor, target_size: Tuple[int, int]) -> torch.Tensor:
     """Nearest temporal persistence input: latest ERA5 frame upsampled to target grid."""
     if x.dim() == 5:
-        latest = x[:, -1, :, :, :]
+        latest = x[:, -1, 0:1, :, :]
     elif x.dim() == 4:
-        latest = x[:, -1:, :, :]
+        latest = x[:, 0:1, :, :]
     else:
         raise ValueError(f"Unsupported ERA5 tensor shape: {tuple(x.shape)}")
 

@@ -33,9 +33,13 @@ runs/
 results/evaluation/*
 !results/evaluation/
 !results/evaluation/cnn/
-!results/evaluation/cnn/comparison_1_20230101.png
+!results/evaluation/cnn/comparison_1_20230109.png
 !results/evaluation/cnn/metrics.json
+!results/evaluation/convlstm/
+!results/evaluation/convlstm/comparison_1_20230109.png
+!results/evaluation/convlstm/metrics.json
 !results/evaluation/baselines_summary.csv
+!results/evaluation/model_comparison.png
 
 # Training curves are generated locally
 results/training/*

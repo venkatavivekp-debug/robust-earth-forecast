@@ -7,7 +7,7 @@ import socket
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download ERA5 2m temperature for Georgia")
+    parser = argparse.ArgumentParser(description="Download ERA5 surface variables for Georgia")
     parser.add_argument("--year", type=int, default=2023, help="Year (default: 2023)")
     parser.add_argument("--month", type=int, default=1, help="Month 1-12 (default: 1)")
     parser.add_argument(
@@ -82,7 +82,12 @@ def main() -> None:
             "reanalysis-era5-single-levels",
             {
                 "product_type": "reanalysis",
-                "variable": ["2m_temperature"],
+                "variable": [
+                    "2m_temperature",
+                    "10m_u_component_of_wind",
+                    "10m_v_component_of_wind",
+                    "surface_pressure",
+                ],
                 "year": str(args.year),
                 "month": f"{args.month:02d}",
                 "day": [f"{day:02d}" for day in range(1, days_in_month + 1)],

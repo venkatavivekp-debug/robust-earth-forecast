@@ -17,6 +17,12 @@ TIME_DIM_CANDIDATES = ("time", "valid_time", "date")
 LAT_DIM_CANDIDATES = ("latitude", "lat", "y")
 LON_DIM_CANDIDATES = ("longitude", "lon", "x")
 DATE_PATTERN = re.compile(r"(19|20)\d{6}")
+ERA5_CHANNELS = [
+    ("t2m", ("t2m", "2m_temperature")),
+    ("u10", ("u10", "10m_u_component_of_wind")),
+    ("v10", ("v10", "10m_v_component_of_wind")),
+    ("sp", ("sp", "surface_pressure")),
+]
 
 
 @dataclass(frozen=True)
@@ -40,7 +46,7 @@ class SampleMetadata:
 class ERA5_PRISM_Dataset(Dataset):
     """Temporal ERA5->PRISM dataset for regional downscaling.
 
-    Input  X: [T, 1, H_era5, W_era5]
+    Input  X: [T, 4, H_era5, W_era5]
     Target Y: [1, H_prism, W_prism]
     """
 
@@ -64,6 +70,7 @@ class ERA5_PRISM_Dataset(Dataset):
             raise FileNotFoundError(f"ERA5 file not found: {self.era5_path}")
 
         self.era5_daily = self._load_era5_daily(self.era5_path, era5_variable)
+        self.era5_channel_count = int(self.era5_daily.sizes["channel"])
         self.era5_dates = pd.to_datetime(self.era5_daily["time"].values).normalize()
         self.era5_bounds = self._get_era5_bounds(self.era5_daily)
         self._era5_index_by_date: Dict[pd.Timestamp, int] = {
@@ -196,12 +203,13 @@ class ERA5_PRISM_Dataset(Dataset):
         era5_window = (
             self.era5_daily
             .isel(time=slice(rec.era5_start_idx, rec.era5_end_idx + 1))
+            .transpose("time", "channel", "latitude", "longitude")
             .values.astype(np.float32)
         )
         era5_window = self._fill_missing(era5_window)
         prism_array = self._prism_arrays[rec.date]
 
-        x = torch.from_numpy(era5_window).unsqueeze(1)  # [T, 1, H, W]
+        x = torch.from_numpy(era5_window)  # [T, 4, H, W]
         y = torch.from_numpy(prism_array).unsqueeze(0)  # [1, H_high, W_high]
         return x, y
 
@@ -209,7 +217,7 @@ class ERA5_PRISM_Dataset(Dataset):
         rec = self._records[idx]
         era5_shape = (
             self.history_length,
-            1,
+            self.era5_channel_count,
             int(self.era5_daily.shape[-2]),
             int(self.era5_daily.shape[-1]),
         )
@@ -237,35 +245,59 @@ class ERA5_PRISM_Dataset(Dataset):
 
         if not era5_ds.data_vars:
             raise ValueError("ERA5 dataset has no data variables")
+        if era5_variable is not None:
+            supported = {name for _, candidates in ERA5_CHANNELS for name in candidates}
+            if era5_variable not in supported:
+                raise ValueError(
+                    f"era5_variable='{era5_variable}' is not supported for multivariable loading. "
+                    f"Expected one of {sorted(supported)}."
+                )
 
-        if era5_variable is None:
-            era5_variable = "t2m" if "t2m" in era5_ds.data_vars else list(era5_ds.data_vars)[0]
+        channel_arrays: List[xr.DataArray] = []
+        missing_channels: List[str] = []
+        channel_names: List[str] = []
 
-        if era5_variable not in era5_ds.data_vars:
+        for canonical_name, candidates in ERA5_CHANNELS:
+            var_name = next((name for name in candidates if name in era5_ds.data_vars), None)
+            if var_name is None:
+                missing_channels.append(canonical_name)
+                continue
+
+            era5_da = era5_ds[var_name]
+            time_dim = self._find_first_dim(era5_da.dims, TIME_DIM_CANDIDATES, "time")
+            lat_dim = self._find_first_dim(era5_da.dims, LAT_DIM_CANDIDATES, "latitude")
+            lon_dim = self._find_first_dim(era5_da.dims, LON_DIM_CANDIDATES, "longitude")
+
+            era5_da = era5_da.transpose(time_dim, lat_dim, lon_dim).rename(
+                {time_dim: "time", lat_dim: "latitude", lon_dim: "longitude"}
+            )
+            era5_daily = era5_da.resample(time="1D").mean(keep_attrs=True)
+
+            if canonical_name == "t2m" and float(era5_daily.mean(skipna=True)) > 150.0:
+                era5_daily = era5_daily - 273.15
+            if canonical_name == "sp" and float(era5_daily.mean(skipna=True)) > 2000.0:
+                era5_daily = era5_daily / 100.0
+
+            channel_arrays.append(era5_daily.astype(np.float32))
+            channel_names.append(canonical_name)
+
+        if missing_channels:
             raise ValueError(
-                f"ERA5 variable '{era5_variable}' not found. Available: {list(era5_ds.data_vars)}"
+                "ERA5 dataset is missing required variables: "
+                f"{missing_channels}. Available: {list(era5_ds.data_vars)}"
             )
 
-        era5_da = era5_ds[era5_variable]
+        if not channel_arrays:
+            raise ValueError("No ERA5 variables were loaded")
 
-        time_dim = self._find_first_dim(era5_da.dims, TIME_DIM_CANDIDATES, "time")
-        lat_dim = self._find_first_dim(era5_da.dims, LAT_DIM_CANDIDATES, "latitude")
-        lon_dim = self._find_first_dim(era5_da.dims, LON_DIM_CANDIDATES, "longitude")
+        aligned = xr.align(*channel_arrays, join="inner")
+        stacked = xr.concat(aligned, dim="channel").assign_coords(channel=channel_names)
+        stacked = stacked.transpose("time", "channel", "latitude", "longitude")
 
-        era5_da = era5_da.transpose(time_dim, lat_dim, lon_dim)
+        if stacked.sizes.get("time", 0) < 1:
+            raise ValueError("ERA5 dataset has no usable daily timesteps after alignment")
 
-        if float(era5_da.mean()) > 150.0:
-            era5_da = era5_da - 273.15
-
-        era5_daily = era5_da.resample({time_dim: "1D"}).mean(keep_attrs=True)
-        era5_daily = era5_daily.rename(
-            {time_dim: "time", lat_dim: "latitude", lon_dim: "longitude"}
-        )
-
-        if era5_daily.sizes.get("time", 0) < 1:
-            raise ValueError("ERA5 dataset has no usable daily timesteps")
-
-        return era5_daily
+        return stacked
 
     @staticmethod
     def _get_era5_bounds(era5_daily: xr.DataArray) -> Tuple[float, float, float, float]:

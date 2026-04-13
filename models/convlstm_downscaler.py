@@ -39,7 +39,7 @@ class ConvLSTMDownscaler(nn.Module):
 
     def __init__(
         self,
-        input_channels: int = 1,
+        input_channels: int = 4,
         hidden_channels: int = 32,
         out_channels: int = 1,
         kernel_size: int = 3,

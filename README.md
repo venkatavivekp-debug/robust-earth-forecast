@@ -1,102 +1,82 @@
 # Robust Earth Forecast
 
-Spatiotemporal regional downscaling from ERA5 to PRISM temperature over Georgia.
+A spatiotemporal deep learning pipeline for regional climate downscaling from ERA5 to PRISM over Georgia.
 
 ## Problem
 
-ERA5 gives broad atmospheric context but at coarse resolution. PRISM provides finer regional temperature grids. The task here is to learn a mapping from ERA5 history windows to a PRISM target map:
+ERA5 provides coarse reanalysis fields. PRISM provides higher-resolution observed temperature grids. The target is a date-aligned mapping from ERA5 history windows to PRISM daily rasters:
 
 `ERA5(t-k+1 ... t) -> PRISM(t)`
 
 ## Approach
 
-Model progression in this repository:
+Model ladder in this repository:
 
-- persistence baseline (upsampled latest ERA5 frame)
+- persistence baseline
 - global linear baseline
-- spatial CNN baseline
-- ConvLSTM spatiotemporal model
+- CNN spatial baseline
+- ConvLSTM temporal model
 
-The comparison is used to check whether temporal context improves downscaling quality over spatial-only baselines.
+ERA5 inputs use four variables: `2m_temperature`, `10m_u_component_of_wind`, `10m_v_component_of_wind`, and `surface_pressure`.
 
-## Data Requirements
+Using only temperature was limiting. Adding wind and pressure improved the model behavior.
 
-Expected inputs:
+## Data
 
-- `data_raw/era5_georgia_temp.nc`
-- `data_raw/prism/` with dated rasters (`.bil`, `.tif`, `.tiff`, `.asc`)
+- ERA5: NetCDF from CDS (`data_raw/era5_georgia_temp.nc`)
+- PRISM: daily rasters (`.bil`, `.tif`, `.tiff`, `.asc`) under `data_raw/prism/`
 
-Temporal sample count depends on both available dates and `--history-length`.
+The dataset loader handles date parsing, CRS checks, reprojection to EPSG:4326, clipping to ERA5 extent, and temporal window construction.
 
-Approximate usable samples:
-
-`usable_samples ~= aligned_dates - history_length + 1`
-
-At least 2 usable samples are required for train/validation split. The training and evaluation scripts now fail with a clear message when this requirement is not met, including suggested download commands.
-
-## How To Run
+## Run
 
 ```bash
 git clone https://github.com/venkatavivekp-debug/robust-earth-forecast.git
 cd robust-earth-forecast
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
 python data_pipeline/download_era5_georgia.py --year 2023 --month 1
-python data_pipeline/download_prism.py --start-date 20230101 --days 20 --variable tmean
+python data_pipeline/download_prism.py --start-date 20230101 --days 10 --variable tmean
 
-python training/train_downscaler.py --model cnn --history-length 5 --epochs 20 --batch-size 4 --learning-rate 1e-3
-python training/train_downscaler.py --model convlstm --history-length 5 --epochs 20 --batch-size 4 --learning-rate 1e-3
+python training/train_downscaler.py --model cnn --history-length 1 --epochs 5
+python training/train_downscaler.py --model convlstm --history-length 3 --epochs 5
+python training/train_downscaler.py --model cnn --history-length 3 --epochs 5
 
-python evaluation/evaluate_model.py --models persistence linear cnn convlstm --history-length 5 --num-samples 8
+python evaluation/evaluate_model.py --models persistence linear cnn convlstm --history-length 3 --num-samples 8
 
 jupyter notebook notebooks/era5_prism_downscaling.ipynb
 ```
 
 ## Results
 
-Tracked sample output:
+![Model Comparison](results/evaluation/model_comparison.png)
 
-![CNN Downscaling Output](results/evaluation/cnn/comparison_1_20230101.png)
+Figure layout: left is upsampled ERA5 input, middle panels are model predictions, right is PRISM target.
 
-Saved outputs:
+Recent run (`results/evaluation/baselines_summary.csv`):
 
-- `results/evaluation/cnn/metrics.json`
-- `results/evaluation/convlstm/metrics.json` (when ConvLSTM is evaluated)
-- `results/evaluation/baselines_summary.csv`
-- `results/evaluation/model_comparison.png` (when multiple model outputs are available)
+- linear: RMSE 2.195, MAE 1.470
+- cnn: RMSE 2.561, MAE 2.180
+- convlstm: RMSE 9.278, MAE 9.062
 
-Current interpretation:
-
-- ERA5 structure is captured at large scales.
-- Fine spatial structure remains harder to recover.
-- In current limited runs, the linear baseline can outperform deep models because the training set is small.
-- ConvLSTM should be compared directly against CNN using `baselines_summary.csv` and per-model metrics when ConvLSTM outputs are present.
-- With limited temporal coverage, simple baselines outperform deep models, highlighting the importance of larger datasets for spatiotemporal learning.
+With this small sample, linear remains strongest. Deep models need more temporal coverage and training volume.
 
 ## Limitations
 
-- single region (Georgia)
-- limited predictor set
-- short temporal windows in default runs
-- data volume can be small for stable temporal training
-- small model scale relative to modern large weather systems
+- short temporal span in current run
+- one region (Georgia)
+- only four ERA5 predictors
+- ConvLSTM still data-limited in this setup
 
 ## Relation to Existing Work
 
-ConvLSTM is a standard spatiotemporal sequence model and is used here as the main temporal baseline. Modern weather ML systems (such as FourCastNet, GraphCast, and Prithvi WxC) motivate the emphasis on temporal dynamics. This repository focuses on a smaller regional downscaling setup rather than reproducing large global models.
-
-## Current Observation
-
-With limited temporal coverage, simple baselines outperform deep models.  
-This indicates that model capacity is not the bottleneck — data availability is.
+ConvLSTM is a standard spatiotemporal model for sequence-conditioned spatial prediction. This codebase follows that direction in a small regional downscaling setting and does not attempt to reproduce large global systems.
 
 ## Direction
 
-The pipeline is structured to move toward:
-
-- temporal modeling at larger scale
-- multi-variable ERA5 inputs
-- multi-source geospatial data
+- longer temporal windows
+- more ERA5 variables
+- multi-source geospatial inputs
 - uncertainty-aware prediction
