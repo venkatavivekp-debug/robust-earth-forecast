@@ -34,10 +34,10 @@ results/evaluation/*
 results/evaluation/*/comparison_*.png
 !results/evaluation/
 !results/evaluation/cnn/
-!results/evaluation/cnn/comparison_1_20230115.png
+!results/evaluation/cnn/comparison_1_*.png
 !results/evaluation/cnn/metrics.json
 !results/evaluation/convlstm/
-!results/evaluation/convlstm/comparison_1_20230115.png
+!results/evaluation/convlstm/comparison_1_*.png
 !results/evaluation/convlstm/metrics.json
 !results/evaluation/baselines_summary.csv
 !results/evaluation/model_comparison.png

@@ -397,6 +397,8 @@ def main() -> None:
 
         model_dir = results_root / model_name
         model_dir.mkdir(parents=True, exist_ok=True)
+        for stale_plot in model_dir.glob("comparison_*.png"):
+            stale_plot.unlink(missing_ok=True)
 
         with torch.no_grad():
             for sample_idx in eval_indices:

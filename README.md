@@ -57,6 +57,12 @@ Observation: ConvLSTM benefits from temporal context (`history=3/6`) while CNN g
 
 Observation: the extended variable set gives the best RMSE/MAE/correlation.
 
+## Relation to Existing Work
+
+This pipeline follows the same core downscaling direction as CNN-based regional climate methods such as DeepSD-style setups: learning a mapping from coarse atmospheric fields to finer regional targets. Here the mapping is ERA5 to PRISM over Georgia, with supervised spatial learning and multi-variable conditioning.
+
+Modern weather and climate ML also emphasizes high-dimensional inputs and temporal structure. The ConvLSTM path in this repository adds temporal sequence modeling on top of multi-variable ERA5 inputs, but the scope is intentionally regional and compact rather than a large-scale pretrained foundation model.
+
 ## Latest tuned evaluation
 
 ![Model Comparison](results/evaluation/model_comparison.png)
@@ -68,7 +74,7 @@ From `results/evaluation/baselines_summary.csv` (history=3, extended input set):
 - cnn: RMSE 3.121, MAE 2.566, CORR 0.626
 - convlstm: RMSE 1.749, MAE 1.377, CORR 0.778
 
-ConvLSTM is strongest in the tuned configuration.
+ConvLSTM is the best model on the same validation split in this tuned run.
 
 ## Visual diagnostics
 
