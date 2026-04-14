@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate ERA5->PRISM downscaling baselines and temporal models")
     parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
     parser.add_argument("--prism-path", type=str, default="data_raw/prism")
+    parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
     parser.add_argument(
         "--models",
         type=str,
@@ -113,7 +114,9 @@ def build_insufficient_samples_message(
     )
 
 
-def load_checkpoint_model(model_name: str, checkpoint_path: Path, device: Any) -> Tuple[Any, int, Optional[Dict[str, List[float]]]]:
+def load_checkpoint_model(
+    model_name: str, checkpoint_path: Path, device: Any
+) -> Tuple[Any, int, Optional[Dict[str, List[float]]], Optional[str]]:
     from models.cnn_downscaler import CNNDownscaler
     from models.convlstm_downscaler import ConvLSTMDownscaler
 
@@ -145,7 +148,8 @@ def load_checkpoint_model(model_name: str, checkpoint_path: Path, device: Any) -
     model.to(device)
     model.eval()
     input_norm = checkpoint.get("input_norm")
-    return model, history_length, input_norm
+    checkpoint_input_set = checkpoint.get("args", {}).get("input_set")
+    return model, history_length, input_norm, checkpoint_input_set
 
 
 def normalize_input_batch(
@@ -253,6 +257,46 @@ def save_model_comparison(
     plt.close(fig)
 
 
+def save_visual_diagnostics(
+    prediction: np.ndarray,
+    target: np.ndarray,
+    output_dir: Path,
+) -> None:
+    _configure_plot_cache()
+    import matplotlib.pyplot as plt
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    abs_error = np.abs(prediction - target)
+
+    vmin = float(min(np.min(prediction), np.min(target)))
+    vmax = float(max(np.max(prediction), np.max(target)))
+
+    fig, axes = plt.subplots(1, 3, figsize=(11, 4), constrained_layout=True)
+    axes[0].imshow(target, cmap="coolwarm", vmin=vmin, vmax=vmax)
+    axes[0].set_title("PRISM Target")
+    axes[0].axis("off")
+
+    axes[1].imshow(prediction, cmap="coolwarm", vmin=vmin, vmax=vmax)
+    axes[1].set_title("Model Prediction")
+    axes[1].axis("off")
+
+    im = axes[2].imshow(abs_error, cmap="magma")
+    axes[2].set_title("Absolute Error")
+    axes[2].axis("off")
+
+    fig.colorbar(im, ax=axes[2], shrink=0.85)
+    fig.savefig(output_dir / "sample_prediction.png", dpi=150)
+    plt.close(fig)
+
+    fig_err, ax_err = plt.subplots(1, 1, figsize=(4.5, 4), constrained_layout=True)
+    im_err = ax_err.imshow(abs_error, cmap="magma")
+    ax_err.set_title("Absolute Error Map")
+    ax_err.axis("off")
+    fig_err.colorbar(im_err, ax=ax_err, shrink=0.85)
+    fig_err.savefig(output_dir / "error_map.png", dpi=150)
+    plt.close(fig_err)
+
+
 def main() -> None:
     args = parse_args()
     if torch is None:
@@ -284,6 +328,7 @@ def main() -> None:
         era5_path=str(era5_path),
         prism_path=str(prism_path),
         history_length=args.history_length,
+        input_set=args.input_set,
     )
     stats = getattr(dataset, "summary_stats", {})
     candidate_dates = int(stats.get("candidate_dates", len(dataset)))
@@ -324,10 +369,15 @@ def main() -> None:
             print(f"Skipping {model_name}: checkpoint not found at {ckpt_path}")
             continue
 
-        model, ckpt_history, input_norm = load_checkpoint_model(model_name, ckpt_path, device)
+        model, ckpt_history, input_norm, checkpoint_input_set = load_checkpoint_model(model_name, ckpt_path, device)
         if ckpt_history != args.history_length:
             print(
                 f"Skipping {model_name}: checkpoint history_length={ckpt_history} does not match requested {args.history_length}"
+            )
+            continue
+        if checkpoint_input_set is not None and checkpoint_input_set != args.input_set:
+            print(
+                f"Skipping {model_name}: checkpoint input_set={checkpoint_input_set} does not match requested {args.input_set}"
             )
             continue
         learned_models[model_name] = (model, input_norm)
@@ -439,6 +489,13 @@ def main() -> None:
             target=comparison_target,
             output_path=comparison_plot,
             title=f"Model Comparison | ERA5->PRISM | {comparison_date}",
+        )
+
+        preferred_model = "convlstm" if "convlstm" in comparison_predictions else sorted(comparison_predictions.keys())[0]
+        save_visual_diagnostics(
+            prediction=comparison_predictions[preferred_model],
+            target=comparison_target,
+            output_dir=PROJECT_ROOT / "results" / "visualizations",
         )
 
     print(f"Saved evaluation summary CSV: {summary_csv}")

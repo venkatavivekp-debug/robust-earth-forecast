@@ -21,6 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Lightweight hyperparameter sweep for ERA5->PRISM models")
     parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
     parser.add_argument("--prism-path", type=str, default="data_raw/prism")
+    parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
     parser.add_argument("--models", nargs="+", choices=["cnn", "convlstm"], default=["cnn", "convlstm"])
     parser.add_argument("--history-lengths", nargs="+", type=int, default=[3, 6])
     parser.add_argument("--learning-rates", nargs="+", type=float, default=[1e-3, 5e-4, 1e-4])
@@ -51,6 +52,8 @@ def build_train_command(args: argparse.Namespace, model: str, history: int, lr: 
         args.era5_path,
         "--prism-path",
         args.prism_path,
+        "--input-set",
+        args.input_set,
         "--model",
         model,
         "--history-length",
@@ -115,6 +118,7 @@ def main() -> None:
         row = {
             "run_name": run_name,
             "model": model,
+            "input_set": args.input_set,
             "history_length": int(history),
             "learning_rate": float(lr),
             "weight_decay": float(wd),
@@ -141,6 +145,7 @@ def main() -> None:
     fieldnames = [
         "run_name",
         "model",
+        "input_set",
         "history_length",
         "learning_rate",
         "weight_decay",

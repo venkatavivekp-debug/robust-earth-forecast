@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 from pathlib import Path
 import sys
@@ -29,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train ERA5->PRISM downscaling models (CNN or ConvLSTM)")
     parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
     parser.add_argument("--prism-path", type=str, default="data_raw/prism")
+    parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
     parser.add_argument("--model", type=str, choices=["cnn", "convlstm"], default="convlstm")
     parser.add_argument("--history-length", type=int, default=5)
     parser.add_argument("--epochs", type=int, default=20)
@@ -263,8 +265,13 @@ def save_loss_curve_plot(curve_rows: Sequence[dict], output_path: Path) -> None:
     if not curve_rows:
         return
 
+    cache_root = PROJECT_ROOT / ".cache"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("MPLBACKEND", "Agg")
+    os.environ.setdefault("XDG_CACHE_HOME", str(cache_root))
+    os.environ.setdefault("MPLCONFIGDIR", str(cache_root / "matplotlib"))
+
     import matplotlib
-    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     epochs = [int(row["epoch"]) for row in curve_rows]
@@ -313,6 +320,7 @@ def main() -> None:
 
     print("Training started")
     print(f"Model: {args.model}")
+    print(f"Input set: {args.input_set}")
     print(f"History length: {args.history_length}")
     print(f"Device: {device.type} | Seed: {args.seed}")
 
@@ -320,6 +328,7 @@ def main() -> None:
         era5_path=str(era5_path),
         prism_path=str(prism_path),
         history_length=args.history_length,
+        input_set=args.input_set,
     )
     stats = getattr(dataset, "summary_stats", {})
     candidate_dates = int(stats.get("candidate_dates", len(dataset)))
@@ -482,6 +491,7 @@ def main() -> None:
         {
             "run_name": run_name,
             "model": args.model,
+            "input_set": args.input_set,
             "history_length": int(args.history_length),
             "best_epoch": int(best_epoch),
             "best_val_loss": float(best_val_loss),

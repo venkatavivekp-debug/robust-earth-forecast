@@ -1,9 +1,9 @@
 {
-  "rmse": 2.4246950149536133,
-  "mae": 2.044653844833374,
-  "bias": 0.4612183809280396,
-  "correlation": 0.7872476022283539,
+  "rmse": 1.748717188835144,
+  "mae": 1.376468539237976,
+  "bias": -0.18762807299693426,
+  "correlation": 0.7783659052327575,
   "model": "convlstm",
-  "num_samples": 5,
-  "history_length": 6
+  "num_samples": 6,
+  "history_length": 3
 }

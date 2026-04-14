@@ -31,6 +31,7 @@ runs/
 
 # Generated evaluation outputs (track only small curated samples)
 results/evaluation/*
+results/evaluation/*/comparison_*.png
 !results/evaluation/
 !results/evaluation/cnn/
 !results/evaluation/cnn/comparison_1_20230115.png
