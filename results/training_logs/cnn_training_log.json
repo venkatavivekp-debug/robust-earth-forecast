@@ -1,0 +1,15 @@
+{
+  "run_name": "cnn",
+  "model": "cnn",
+  "history_length": 6,
+  "best_epoch": 8,
+  "best_val_loss": 16.39368438720703,
+  "epochs": 30,
+  "learning_rate": 0.0005,
+  "weight_decay": 0.0,
+  "grad_clip": 1.0,
+  "scheduler": "plateau",
+  "split_seed": 42,
+  "seed": 42,
+  "checkpoint_path": "checkpoints/cnn_best.pt"
+}

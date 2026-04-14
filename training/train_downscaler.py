@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import random
 from pathlib import Path
 import sys
@@ -35,6 +36,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--grad-clip", type=float, default=1.0)
+    parser.add_argument("--scheduler", type=str, choices=["none", "plateau", "cosine"], default="plateau")
+    parser.add_argument("--scheduler-patience", type=int, default=5)
+    parser.add_argument("--scheduler-factor", type=float, default=0.5)
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=0)
@@ -56,9 +60,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--training-results-dir",
         type=str,
-        default="results/training",
-        help="Directory for training curve CSV",
+        default="results/training_logs",
+        help="Directory for training logs and curves",
     )
+    parser.add_argument("--run-name", type=str, default=None, help="Optional run label for log artifacts")
     return parser.parse_args()
 
 
@@ -242,11 +247,42 @@ def run_epoch(
 
 def save_training_curve(curve_rows: Sequence[dict], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["epoch", "train_loss", "val_loss", "is_best"]
+    fieldnames = ["epoch", "train_loss", "val_loss", "lr", "is_best"]
     with output_path.open("w", newline="") as fp:
         writer = csv.DictWriter(fp, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(curve_rows)
+
+
+def save_training_summary(summary: dict, output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(summary, indent=2))
+
+
+def save_loss_curve_plot(curve_rows: Sequence[dict], output_path: Path) -> None:
+    if not curve_rows:
+        return
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    epochs = [int(row["epoch"]) for row in curve_rows]
+    train_losses = [float(row["train_loss"]) for row in curve_rows]
+    val_losses = [float(row["val_loss"]) for row in curve_rows]
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.plot(epochs, train_losses, label="train_loss", linewidth=1.8)
+    ax.plot(epochs, val_losses, label="val_loss", linewidth=1.8)
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("MSE Loss")
+    ax.set_title("Training Curve")
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
 
 
 def main() -> None:
@@ -331,6 +367,23 @@ def main() -> None:
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
     )
+    if args.scheduler == "plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=float(args.scheduler_factor),
+            patience=int(args.scheduler_patience),
+            min_lr=1e-6,
+        )
+    elif args.scheduler == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=max(1, int(args.epochs)),
+            eta_min=1e-6,
+        )
+    else:
+        scheduler = None
+
     criterion = nn.MSELoss()
 
     print(
@@ -338,9 +391,13 @@ def main() -> None:
         f"input_shape={tuple(sample_x.shape)} target_shape={tuple(sample_y.shape)}"
     )
     print(f"Input normalization mean={input_mean_np.tolist()} std={input_std_np.tolist()}")
-    print(f"Optimizer: Adam lr={args.learning_rate} weight_decay={args.weight_decay} grad_clip={args.grad_clip}")
+    print(
+        f"Optimizer: Adam lr={args.learning_rate} weight_decay={args.weight_decay} "
+        f"grad_clip={args.grad_clip} scheduler={args.scheduler}"
+    )
 
     best_val_loss = float("inf")
+    best_epoch = 0
     curve_rows: List[dict] = []
 
     for epoch in range(1, args.epochs + 1):
@@ -367,9 +424,17 @@ def main() -> None:
             grad_clip=args.grad_clip,
         )
 
+        if scheduler is not None:
+            if args.scheduler == "plateau":
+                scheduler.step(val_loss)
+            else:
+                scheduler.step()
+
+        current_lr = float(optimizer.param_groups[0]["lr"])
         improved = val_loss < best_val_loss
         if improved:
             best_val_loss = val_loss
+            best_epoch = epoch
             torch.save(
                 {
                     "model_type": args.model,
@@ -394,6 +459,7 @@ def main() -> None:
                 "epoch": epoch,
                 "train_loss": f"{train_loss:.8f}",
                 "val_loss": f"{val_loss:.8f}",
+                "lr": f"{current_lr:.8f}",
                 "is_best": int(improved),
             }
         )
@@ -401,15 +467,40 @@ def main() -> None:
         marker = "*" if improved else ""
         print(
             f"Epoch {epoch:03d}/{args.epochs:03d} "
-            f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} {marker}"
+            f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} lr={current_lr:.6f} {marker}"
         )
 
-    curves_dir = Path(args.training_results_dir)
-    curve_path = curves_dir / f"{args.model}_training_curve.csv"
+    artifact_dir = Path(args.training_results_dir)
+    run_name = args.run_name or args.model
+    curve_path = artifact_dir / f"{run_name}_training_log.csv"
+    summary_path = artifact_dir / f"{run_name}_training_log.json"
+    plot_path = artifact_dir / f"{run_name}_loss_curve.png"
+
     save_training_curve(curve_rows, curve_path)
+    save_loss_curve_plot(curve_rows, plot_path)
+    save_training_summary(
+        {
+            "run_name": run_name,
+            "model": args.model,
+            "history_length": int(args.history_length),
+            "best_epoch": int(best_epoch),
+            "best_val_loss": float(best_val_loss),
+            "epochs": int(args.epochs),
+            "learning_rate": float(args.learning_rate),
+            "weight_decay": float(args.weight_decay),
+            "grad_clip": float(args.grad_clip),
+            "scheduler": args.scheduler,
+            "split_seed": int(args.split_seed),
+            "seed": int(args.seed),
+            "checkpoint_path": str(checkpoint_path),
+        },
+        summary_path,
+    )
 
     print(f"Best checkpoint saved to: {checkpoint_path} (val_loss={best_val_loss:.6f})")
-    print(f"Training curve saved to: {curve_path}")
+    print(f"Training log saved to: {curve_path}")
+    print(f"Training summary saved to: {summary_path}")
+    print(f"Loss curve saved to: {plot_path}")
 
 
 if __name__ == "__main__":

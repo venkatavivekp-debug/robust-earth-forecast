@@ -174,7 +174,8 @@ def compute_metrics(errors: Sequence[Dict[str, float]]) -> Dict[str, float]:
     rmse = float(np.mean([row["rmse"] for row in errors]))
     mae = float(np.mean([row["mae"] for row in errors]))
     bias = float(np.mean([row["bias"] for row in errors]))
-    return {"rmse": rmse, "mae": mae, "bias": bias}
+    correlation = float(np.mean([row["correlation"] for row in errors]))
+    return {"rmse": rmse, "mae": mae, "bias": bias, "correlation": correlation}
 
 
 def save_comparison_plot(
@@ -370,7 +371,12 @@ def main() -> None:
                 rmse = float(torch.sqrt(torch.mean(err ** 2)).item())
                 mae = float(torch.mean(torch.abs(err)).item())
                 bias = float(torch.mean(err).item())
-                errors.append({"rmse": rmse, "mae": mae, "bias": bias})
+                pred_flat = pred.reshape(-1).detach().cpu().numpy()
+                target_flat = y.reshape(-1).detach().cpu().numpy()
+                correlation = float(np.corrcoef(pred_flat, target_flat)[0, 1]) if pred_flat.size > 1 else 0.0
+                if not np.isfinite(correlation):
+                    correlation = 0.0
+                errors.append({"rmse": rmse, "mae": mae, "bias": bias, "correlation": correlation})
 
                 if not saved_plot:
                     date = dataset.metadata(sample_idx).date.strftime("%Y%m%d")
@@ -410,7 +416,7 @@ def main() -> None:
         metrics_path.write_text(json.dumps(summary, indent=2))
         print(
             f"{model_name:>11} | RMSE={summary['rmse']:.4f} "
-            f"MAE={summary['mae']:.4f} BIAS={summary['bias']:.4f}"
+            f"MAE={summary['mae']:.4f} BIAS={summary['bias']:.4f} CORR={summary['correlation']:.4f}"
         )
 
     if not model_metrics_rows:
@@ -418,7 +424,10 @@ def main() -> None:
 
     summary_csv = results_root / "baselines_summary.csv"
     with summary_csv.open("w", newline="") as fp:
-        writer = csv.DictWriter(fp, fieldnames=["model", "rmse", "mae", "bias", "num_samples", "history_length"])
+        writer = csv.DictWriter(
+            fp,
+            fieldnames=["model", "rmse", "mae", "bias", "correlation", "num_samples", "history_length"],
+        )
         writer.writeheader()
         writer.writerows(model_metrics_rows)
 

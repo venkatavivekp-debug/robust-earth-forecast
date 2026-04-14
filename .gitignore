@@ -43,3 +43,6 @@ results/evaluation/*
 
 # Training curves are generated locally
 results/training/*
+
+# Temporary tuning checkpoints
+results/tuning/checkpoints_tmp/
