@@ -1,85 +1,79 @@
 # Robust Earth Forecast
 
-ERA5 to PRISM spatiotemporal downscaling over Georgia with multi-variable inputs and tuned CNN/ConvLSTM baselines.
+A regional spatiotemporal deep learning pipeline for ERA5 to PRISM climate downscaling over Georgia.
 
-## Pipeline
+## Problem
 
-- ERA5 ingestion (single-level + pressure-level) and PRISM raster ingestion
-- Spatial clipping, temporal alignment, supervised sample building
-- Models: persistence, linear, CNN, ConvLSTM
-- Metrics: RMSE, MAE, bias, correlation
+ERA5 provides coarse reanalysis fields, while PRISM provides higher-resolution temperature targets. The task is supervised downscaling: learn a mapping from coarse ERA5 grids to finer PRISM temperature fields for Georgia.
 
-## Input variables
+## Why These Inputs
 
-Current `extended` input set includes:
+The core variables are surface temperature (`t2m`), near-surface wind (`u10`, `v10`), and surface pressure (`sp`). These provide direct local thermodynamic and circulation context.
 
-- `t2m`, `u10`, `v10`, `sp`
-- `tp`, `rh2m`
-- `rh_850`, `rh_500`
-- `t_850`, `t_500`
-- `gh_850`, `gh_500`
+The extended input set adds precipitation, 2m relative humidity, and pressure-level information (`t`, `rh`, geopotential height at 850/500 hPa). This adds vertical and moisture structure that helps constrain near-surface temperature patterns. In current experiments, richer atmospheric context improves prediction quality.
 
-## What was causing weak training
+## Model Choice
 
-Main issues were short training runs and optimizer sensitivity. The updates below improved stability:
+- `persistence`: reference baseline using upsampled latest ERA5 temperature
+- `linear`: global linear mapping baseline
+- `cnn`: spatial coarse-to-fine mapping baseline
+- `convlstm`: spatial + temporal sequence model over ERA5 history
 
-- train-split per-channel normalization with checkpoint reuse in evaluation
-- LR scheduler + gradient clipping + weight decay
-- longer training runs with saved best checkpoints
-- consistent split seed across training and evaluation
+## What Experiments Were Done
 
-## Training and tuning artifacts
+- Training stability and tuning updates: scheduler, gradient clipping, weight decay, train-split normalization reuse
+- Temporal analysis: history lengths `1`, `3`, `6` for CNN and ConvLSTM
+- Input ablation: `t2m` vs `core4` vs `extended`
 
-Saved under:
+## Main Findings
 
-- `results/training_logs/` (loss curves + per-epoch logs)
-- `results/tuning/` (sweep summary + best config)
+- Extended variables outperform reduced input sets in ablation (`results/ablation/ablation_summary.csv`).
+- Temporal context improves ConvLSTM relative to history `1` (`results/temporal_analysis/temporal_summary.csv`).
+- On the fair split used in evaluation, tuned ConvLSTM is best.
 
-Tuning sweep covers:
+From `results/evaluation/baselines_summary.csv` (history `3`, input set `extended`):
 
-- learning rate: `1e-3`, `5e-4`, `1e-4`
-- history length: `3`, `6`
-- weight decay: `0`, `1e-5`
+- persistence: RMSE `3.251`, MAE `2.611`, CORR `0.640`
+- linear: RMSE `2.965`, MAE `2.605`, CORR `0.640`
+- cnn: RMSE `3.121`, MAE `2.566`, CORR `0.626`
+- convlstm: RMSE `1.749`, MAE `1.377`, CORR `0.778`
 
-## Temporal depth analysis
+## Why This Setup Is Reasonable
 
-`results/temporal_analysis/temporal_summary.csv` compares CNN and ConvLSTM for history lengths `1`, `3`, `6`.
-
-Observation: ConvLSTM benefits from temporal context (`history=3/6`) while CNN gains are smaller.
-
-## Input ablation
-
-`results/ablation/ablation_summary.csv` compares ConvLSTM with:
-
-- `t2m` only
-- `core4`
-- `extended`
-
-Observation: the extended variable set gives the best RMSE/MAE/correlation.
+Downscaling is a coarse-to-fine learning problem. Surface temperature depends on more than temperature alone, so multi-variable conditioning is necessary. Atmospheric state evolves over time, so temporal context is important for sequence-to-field prediction. Using train-split normalization and a fixed evaluation split is required for credible model comparison.
 
 ## Relation to Existing Work
 
-This pipeline follows the same core downscaling direction as CNN-based regional climate methods such as DeepSD-style setups: learning a mapping from coarse atmospheric fields to finer regional targets. Here the mapping is ERA5 to PRISM over Georgia, with supervised spatial learning and multi-variable conditioning.
+This setup is closest to CNN-based climate downscaling work such as DeepSD-style coarse-to-fine supervised mapping: low-resolution atmospheric input to high-resolution regional target.
 
-Modern weather and climate ML also emphasizes high-dimensional inputs and temporal structure. The ConvLSTM path in this repository adds temporal sequence modeling on top of multi-variable ERA5 inputs, but the scope is intentionally regional and compact rather than a large-scale pretrained foundation model.
+It is also informed by multi-variable and temporal reasoning used in modern weather/climate models (including Prithvi WxC-style directions). This repository does not reproduce large pretrained systems; it studies the same class of problem in a smaller regional supervised setting.
 
-## Latest tuned evaluation
+## Limitations
+
+- Regional scope limited to Georgia
+- Small temporal/data coverage compared with large weather archives
+- Models are trained from scratch, not pretrained
+
+## Future Direction
+
+- Add more predictor variables and larger temporal coverage
+- Train on more months/years and broader regional subsets
+- Extend sequence length and training duration
+- Add uncertainty-aware heads after baseline performance is stable
+
+## Results Callouts
 
 ![Model Comparison](results/evaluation/model_comparison.png)
 
-From `results/evaluation/baselines_summary.csv` (history=3, extended input set):
+![Sample Prediction](results/visualizations/sample_prediction.png)
 
-- persistence: RMSE 3.251, MAE 2.611, CORR 0.640
-- linear: RMSE 2.965, MAE 2.605, CORR 0.640
-- cnn: RMSE 3.121, MAE 2.566, CORR 0.626
-- convlstm: RMSE 1.749, MAE 1.377, CORR 0.778
+![Error Map](results/visualizations/error_map.png)
 
-ConvLSTM is the best model on the same validation split in this tuned run.
+Supporting summaries:
 
-## Visual diagnostics
-
-- `results/visualizations/sample_prediction.png`
-- `results/visualizations/error_map.png`
+- `results/evaluation/baselines_summary.csv`
+- `results/temporal_analysis/temporal_summary.csv`
+- `results/ablation/ablation_summary.csv`
 
 ## Run
 
