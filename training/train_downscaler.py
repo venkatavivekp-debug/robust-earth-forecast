@@ -14,10 +14,12 @@ import numpy as np
 try:
     import torch
     import torch.nn as nn
+    import torch.nn.functional as F
     from torch.utils.data import DataLoader, Subset
 except ModuleNotFoundError:
     torch = None
     nn = None
+    F = None
     DataLoader = None
     Subset = None
 
@@ -37,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
+    parser.add_argument("--l1-weight", type=float, default=0.1)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--scheduler", type=str, choices=["none", "plateau", "cosine"], default="plateau")
     parser.add_argument("--scheduler-patience", type=int, default=5)
@@ -216,6 +219,7 @@ def run_epoch(
     model: Any,
     loader: Any,
     criterion: Any,
+    l1_weight: float,
     optimizer: Any,
     device: Any,
     train: bool,
@@ -233,7 +237,12 @@ def run_epoch(
 
         with torch.set_grad_enabled(train):
             preds = model(x_model, target_size=(y.shape[-2], y.shape[-1]))
-            loss = criterion(preds, y)
+            mse_loss = criterion(preds, y)
+            if l1_weight > 0.0:
+                l1_loss = F.l1_loss(preds, y)
+                loss = mse_loss + float(l1_weight) * l1_loss
+            else:
+                loss = mse_loss
 
             if train:
                 optimizer.zero_grad()
@@ -402,7 +411,7 @@ def main() -> None:
     print(f"Input normalization mean={input_mean_np.tolist()} std={input_std_np.tolist()}")
     print(
         f"Optimizer: Adam lr={args.learning_rate} weight_decay={args.weight_decay} "
-        f"grad_clip={args.grad_clip} scheduler={args.scheduler}"
+        f"l1_weight={args.l1_weight} grad_clip={args.grad_clip} scheduler={args.scheduler}"
     )
 
     best_val_loss = float("inf")
@@ -414,6 +423,7 @@ def main() -> None:
             model,
             train_loader,
             criterion,
+            args.l1_weight,
             optimizer,
             device,
             train=True,
@@ -425,6 +435,7 @@ def main() -> None:
             model,
             val_loader,
             criterion,
+            args.l1_weight,
             optimizer,
             device,
             train=False,
@@ -498,6 +509,7 @@ def main() -> None:
             "epochs": int(args.epochs),
             "learning_rate": float(args.learning_rate),
             "weight_decay": float(args.weight_decay),
+            "l1_weight": float(args.l1_weight),
             "grad_clip": float(args.grad_clip),
             "scheduler": args.scheduler,
             "split_seed": int(args.split_seed),

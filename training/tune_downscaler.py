@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weight-decays", nargs="+", type=float, default=[0.0, 1e-5])
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--l1-weight", type=float, default=0.1)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--scheduler", type=str, choices=["none", "plateau", "cosine"], default="plateau")
     parser.add_argument("--split-seed", type=int, default=42)
@@ -66,6 +67,8 @@ def build_train_command(args: argparse.Namespace, model: str, history: int, lr: 
         str(lr),
         "--weight-decay",
         str(wd),
+        "--l1-weight",
+        str(args.l1_weight),
         "--grad-clip",
         str(args.grad_clip),
         "--scheduler",
@@ -122,6 +125,7 @@ def main() -> None:
             "history_length": int(history),
             "learning_rate": float(lr),
             "weight_decay": float(wd),
+            "l1_weight": float(args.l1_weight),
             "epochs": int(args.epochs),
             "status": "ok" if proc.returncode == 0 else "failed",
             "best_val_loss": None,
@@ -149,6 +153,7 @@ def main() -> None:
         "history_length",
         "learning_rate",
         "weight_decay",
+        "l1_weight",
         "epochs",
         "status",
         "best_val_loss",

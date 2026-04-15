@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--convlstm-lr", type=float, default=5e-4)
     parser.add_argument("--cnn-wd", type=float, default=0.0)
     parser.add_argument("--convlstm-wd", type=float, default=1e-5)
+    parser.add_argument("--l1-weight", type=float, default=0.1)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--results-dir", type=str, default="results/temporal_analysis")
     return parser.parse_args()
@@ -67,6 +68,8 @@ def train_and_eval(args: argparse.Namespace, model: str, history: int, work_dir:
         str(lr),
         "--weight-decay",
         str(wd),
+        "--l1-weight",
+        str(args.l1_weight),
         "--grad-clip",
         str(args.grad_clip),
         "--split-seed",
@@ -125,6 +128,7 @@ def train_and_eval(args: argparse.Namespace, model: str, history: int, work_dir:
         "epochs": epochs,
         "learning_rate": lr,
         "weight_decay": wd,
+        "l1_weight": float(args.l1_weight),
         "best_val_loss": float(checkpoint.get("best_val_loss", float("inf"))),
         "rmse": float(metrics.get("rmse", float("nan"))),
         "mae": float(metrics.get("mae", float("nan"))),
@@ -158,6 +162,7 @@ def main() -> None:
         "epochs",
         "learning_rate",
         "weight_decay",
+        "l1_weight",
         "best_val_loss",
         "rmse",
         "mae",

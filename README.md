@@ -21,22 +21,30 @@ The extended input set adds precipitation, 2m relative humidity, and pressure-le
 
 ## What Experiments Were Done
 
-- Training stability and tuning updates: scheduler, gradient clipping, weight decay, train-split normalization reuse
+- Training stability and tuning updates: scheduler, gradient clipping, light weight decay, train-split normalization reuse
+- Loss refinement for less smoothing: `MSE + 0.1 * L1`
 - Temporal analysis: history lengths `1`, `3`, `6` for CNN and ConvLSTM
 - Input ablation: `t2m` vs `core4` vs `extended`
+
+Traceability:
+
+- learning-rate sweep: `1e-3`, `5e-4`, `1e-4` (`results/tuning/tuning_summary.csv`)
+- longer convergence runs for final checkpoints (CNN 55 epochs, ConvLSTM 60 epochs)
+- history-length comparison and ablation summaries saved under `results/temporal_analysis/` and `results/ablation/`
 
 ## Main Findings
 
 - Extended variables outperform reduced input sets in ablation (`results/ablation/ablation_summary.csv`).
 - Temporal context improves ConvLSTM relative to history `1` (`results/temporal_analysis/temporal_summary.csv`).
+- Longer runs with scheduler control improve both CNN and ConvLSTM convergence behavior.
 - On the fair split used in evaluation, tuned ConvLSTM is best.
 
 From `results/evaluation/baselines_summary.csv` (history `3`, input set `extended`):
 
 - persistence: RMSE `3.251`, MAE `2.611`, CORR `0.640`
 - linear: RMSE `2.965`, MAE `2.605`, CORR `0.640`
-- cnn: RMSE `3.121`, MAE `2.566`, CORR `0.626`
-- convlstm: RMSE `1.749`, MAE `1.377`, CORR `0.778`
+- cnn: RMSE `2.869`, MAE `2.474`, CORR `0.743`
+- convlstm: RMSE `1.765`, MAE `1.448`, CORR `0.807`
 
 ## Why This Setup Is Reasonable
 
@@ -89,11 +97,11 @@ python data_pipeline/download_prism.py --start-date 20230101 --days 30 --variabl
 
 python training/tune_downscaler.py --models cnn convlstm --input-set extended --history-lengths 3 6 --learning-rates 1e-3 5e-4 1e-4 --weight-decays 0 1e-5 --epochs 20 --split-seed 42
 
-python training/train_downscaler.py --model cnn --input-set extended --history-length 3 --epochs 25 --learning-rate 1e-3 --weight-decay 0 --split-seed 42 --grad-clip 1.0 --run-name cnn
-python training/train_downscaler.py --model convlstm --input-set extended --history-length 3 --epochs 30 --learning-rate 1e-3 --weight-decay 1e-5 --split-seed 42 --grad-clip 1.0 --run-name convlstm
+python training/train_downscaler.py --model cnn --input-set extended --history-length 3 --epochs 55 --learning-rate 5e-4 --weight-decay 0 --l1-weight 0.1 --split-seed 42 --grad-clip 1.0 --run-name cnn
+python training/train_downscaler.py --model convlstm --input-set extended --history-length 3 --epochs 60 --learning-rate 8e-4 --weight-decay 1e-6 --l1-weight 0.1 --split-seed 42 --grad-clip 1.0 --run-name convlstm
 
-python training/run_temporal_analysis.py --input-set extended --histories 1 3 6 --cnn-lr 1e-3 --convlstm-lr 1e-3 --cnn-epochs 20 --convlstm-epochs 25 --split-seed 42
-python training/run_ablation.py --model convlstm --input-sets t2m core4 extended --history-length 6 --epochs 25 --learning-rate 1e-3 --weight-decay 1e-5 --split-seed 42
+python training/run_temporal_analysis.py --input-set extended --histories 1 3 6 --cnn-lr 5e-4 --convlstm-lr 8e-4 --cnn-epochs 20 --convlstm-epochs 30 --cnn-wd 0 --convlstm-wd 1e-6 --l1-weight 0.1 --split-seed 42
+python training/run_ablation.py --model convlstm --input-sets t2m core4 extended --history-length 6 --epochs 30 --learning-rate 8e-4 --weight-decay 1e-6 --l1-weight 0.1 --split-seed 42
 
 python evaluation/evaluate_model.py --input-set extended --models persistence linear cnn convlstm --history-length 3 --num-samples 8 --split-seed 42
 

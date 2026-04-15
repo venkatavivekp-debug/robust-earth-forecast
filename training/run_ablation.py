@@ -24,6 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--learning-rate", type=float, default=5e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
+    parser.add_argument("--l1-weight", type=float, default=0.1)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--seed", type=int, default=42)
@@ -71,6 +72,8 @@ def main() -> None:
             str(args.learning_rate),
             "--weight-decay",
             str(args.weight_decay),
+            "--l1-weight",
+            str(args.l1_weight),
             "--grad-clip",
             str(args.grad_clip),
             "--split-seed",
@@ -129,6 +132,7 @@ def main() -> None:
                 "epochs": args.epochs,
                 "learning_rate": args.learning_rate,
                 "weight_decay": args.weight_decay,
+                "l1_weight": args.l1_weight,
                 "best_val_loss": float(checkpoint.get("best_val_loss", float("inf"))),
                 "rmse": float(metrics.get("rmse", float("nan"))),
                 "mae": float(metrics.get("mae", float("nan"))),
@@ -148,6 +152,7 @@ def main() -> None:
         "epochs",
         "learning_rate",
         "weight_decay",
+        "l1_weight",
         "best_val_loss",
         "rmse",
         "mae",
