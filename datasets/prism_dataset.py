@@ -219,6 +219,9 @@ class ERA5_PRISM_Dataset(Dataset):
         return len(self._records)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        if idx < 0 or idx >= len(self._records):
+            raise IndexError(f"Sample index out of range: {idx}")
+
         rec = self._records[idx]
 
         era5_window = (
@@ -232,6 +235,20 @@ class ERA5_PRISM_Dataset(Dataset):
 
         x = torch.from_numpy(era5_window)  # [T, 4, H, W]
         y = torch.from_numpy(prism_array).unsqueeze(0)  # [1, H_high, W_high]
+
+        if x.dim() != 4:
+            raise RuntimeError(f"Expected ERA5 tensor shape [T, C, H, W], got {tuple(x.shape)}")
+        if y.dim() != 3:
+            raise RuntimeError(f"Expected PRISM tensor shape [C, H, W], got {tuple(y.shape)}")
+        if x.shape[0] != self.history_length:
+            raise RuntimeError(
+                f"History length mismatch: expected {self.history_length}, got {x.shape[0]}"
+            )
+        if not torch.isfinite(x).all():
+            raise RuntimeError(f"Non-finite values found in ERA5 tensor for index {idx} ({rec.date.date()})")
+        if not torch.isfinite(y).all():
+            raise RuntimeError(f"Non-finite values found in PRISM tensor for index {idx} ({rec.date.date()})")
+
         return x, y
 
     def metadata(self, idx: int) -> SampleMetadata:
@@ -435,6 +452,9 @@ class ERA5_PRISM_Dataset(Dataset):
             p95 = float(np.percentile(np.abs(prism_array), 95))
             if p95 > 500.0:
                 prism_array = prism_array / 100.0
+
+        if not np.isfinite(prism_array).all():
+            raise ValueError("PRISM raster contains non-finite values after preprocessing")
 
         return prism_array.astype(np.float32)
 

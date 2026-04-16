@@ -116,7 +116,7 @@ def build_insufficient_samples_message(
 
 def load_checkpoint_model(
     model_name: str, checkpoint_path: Path, device: Any
-) -> Tuple[Any, int, Optional[Dict[str, List[float]]], Optional[str]]:
+) -> Tuple[Any, int, Optional[Dict[str, List[float]]], Optional[str], Optional[List[int]], Optional[List[int]]]:
     from models.cnn_downscaler import CNNDownscaler
     from models.convlstm_downscaler import ConvLSTMDownscaler
 
@@ -149,7 +149,9 @@ def load_checkpoint_model(
     model.eval()
     input_norm = checkpoint.get("input_norm")
     checkpoint_input_set = checkpoint.get("args", {}).get("input_set")
-    return model, history_length, input_norm, checkpoint_input_set
+    train_indices = checkpoint.get("train_indices")
+    val_indices = checkpoint.get("val_indices")
+    return model, history_length, input_norm, checkpoint_input_set, train_indices, val_indices
 
 
 def normalize_input_batch(
@@ -179,7 +181,18 @@ def compute_metrics(errors: Sequence[Dict[str, float]]) -> Dict[str, float]:
     mae = float(np.mean([row["mae"] for row in errors]))
     bias = float(np.mean([row["bias"] for row in errors]))
     correlation = float(np.mean([row["correlation"] for row in errors]))
-    return {"rmse": rmse, "mae": mae, "bias": bias, "correlation": correlation}
+    pred_variance = float(np.mean([row["pred_variance"] for row in errors]))
+    target_variance = float(np.mean([row["target_variance"] for row in errors]))
+    variance_ratio = float(pred_variance / max(target_variance, 1e-8))
+    return {
+        "rmse": rmse,
+        "mae": mae,
+        "bias": bias,
+        "correlation": correlation,
+        "pred_variance": pred_variance,
+        "target_variance": target_variance,
+        "variance_ratio": variance_ratio,
+    }
 
 
 def save_comparison_plot(
@@ -348,16 +361,13 @@ def main() -> None:
             )
         )
 
-    train_indices, val_indices = split_indices(len(dataset), args.val_fraction, args.split_seed)
-    eval_indices = val_indices[: max(1, min(args.num_samples, len(val_indices)))]
-
     linear_model = None
     if "linear" in args.models:
-        print("Fitting linear baseline on training split")
-        linear_model = fit_global_linear_baseline(dataset, train_indices)
-        print(f"Linear baseline coefficients: slope={linear_model.slope:.6f}, intercept={linear_model.intercept:.6f}")
+        # train_indices may come from checkpoint metadata; finalize after checkpoint load.
+        linear_model = "__PENDING__"
 
     learned_models: Dict[str, Tuple[Any, Optional[Dict[str, List[float]]]]] = {}
+    learned_split_signatures: List[Tuple[Tuple[int, ...], Tuple[int, ...]]] = []
     checkpoint_paths = {
         "cnn": Path(args.cnn_checkpoint),
         "convlstm": Path(args.convlstm_checkpoint),
@@ -369,7 +379,9 @@ def main() -> None:
             print(f"Skipping {model_name}: checkpoint not found at {ckpt_path}")
             continue
 
-        model, ckpt_history, input_norm, checkpoint_input_set = load_checkpoint_model(model_name, ckpt_path, device)
+        model, ckpt_history, input_norm, checkpoint_input_set, ckpt_train_indices, ckpt_val_indices = load_checkpoint_model(
+            model_name, ckpt_path, device
+        )
         if ckpt_history != args.history_length:
             print(
                 f"Skipping {model_name}: checkpoint history_length={ckpt_history} does not match requested {args.history_length}"
@@ -381,6 +393,33 @@ def main() -> None:
             )
             continue
         learned_models[model_name] = (model, input_norm)
+        if ckpt_train_indices is not None and ckpt_val_indices is not None:
+            signature = (
+                tuple(int(i) for i in ckpt_train_indices),
+                tuple(int(i) for i in ckpt_val_indices),
+            )
+            learned_split_signatures.append(signature)
+
+    if learned_split_signatures:
+        base_signature = learned_split_signatures[0]
+        if any(sig != base_signature for sig in learned_split_signatures[1:]):
+            raise RuntimeError("Loaded checkpoints use different train/validation splits")
+        train_indices = list(base_signature[0])
+        val_indices = list(base_signature[1])
+        if not train_indices or not val_indices:
+            raise RuntimeError("Checkpoint split metadata is empty")
+        if max(train_indices + val_indices) >= len(dataset) or min(train_indices + val_indices) < 0:
+            raise RuntimeError("Checkpoint split metadata is out of bounds for the current dataset")
+        print("Using train/validation split stored in checkpoint metadata")
+    else:
+        train_indices, val_indices = split_indices(len(dataset), args.val_fraction, args.split_seed)
+        print("Using split generated from --val-fraction and --split-seed")
+
+    eval_indices = val_indices[: max(1, min(args.num_samples, len(val_indices)))]
+    if linear_model == "__PENDING__":
+        print("Fitting linear baseline on training split")
+        linear_model = fit_global_linear_baseline(dataset, train_indices)
+        print(f"Linear baseline coefficients: slope={linear_model.slope:.6f}, intercept={linear_model.intercept:.6f}")
 
     model_metrics_rows: List[Dict[str, Any]] = []
     comparison_predictions: Dict[str, np.ndarray] = {}
@@ -428,7 +467,18 @@ def main() -> None:
                 correlation = float(np.corrcoef(pred_flat, target_flat)[0, 1]) if pred_flat.size > 1 else 0.0
                 if not np.isfinite(correlation):
                     correlation = 0.0
-                errors.append({"rmse": rmse, "mae": mae, "bias": bias, "correlation": correlation})
+                pred_variance = float(np.var(pred_flat))
+                target_variance = float(np.var(target_flat))
+                errors.append(
+                    {
+                        "rmse": rmse,
+                        "mae": mae,
+                        "bias": bias,
+                        "correlation": correlation,
+                        "pred_variance": pred_variance,
+                        "target_variance": target_variance,
+                    }
+                )
 
                 if not saved_plot:
                     date = dataset.metadata(sample_idx).date.strftime("%Y%m%d")
@@ -468,8 +518,11 @@ def main() -> None:
         metrics_path.write_text(json.dumps(summary, indent=2))
         print(
             f"{model_name:>11} | RMSE={summary['rmse']:.4f} "
-            f"MAE={summary['mae']:.4f} BIAS={summary['bias']:.4f} CORR={summary['correlation']:.4f}"
+            f"MAE={summary['mae']:.4f} BIAS={summary['bias']:.4f} CORR={summary['correlation']:.4f} "
+            f"VAR_RATIO={summary['variance_ratio']:.4f}"
         )
+        if summary["variance_ratio"] < 0.15:
+            print(f"Warning: {model_name} predictions show very low spatial variance relative to target.")
 
     if not model_metrics_rows:
         raise RuntimeError("No models were evaluated. Provide valid checkpoints or baseline selections.")
@@ -478,7 +531,18 @@ def main() -> None:
     with summary_csv.open("w", newline="") as fp:
         writer = csv.DictWriter(
             fp,
-            fieldnames=["model", "rmse", "mae", "bias", "correlation", "num_samples", "history_length"],
+            fieldnames=[
+                "model",
+                "rmse",
+                "mae",
+                "bias",
+                "correlation",
+                "pred_variance",
+                "target_variance",
+                "variance_ratio",
+                "num_samples",
+                "history_length",
+            ],
         )
         writer.writeheader()
         writer.writerows(model_metrics_rows)

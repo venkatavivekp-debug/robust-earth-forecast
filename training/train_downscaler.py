@@ -226,39 +226,80 @@ def run_epoch(
     input_mean: Optional[torch.Tensor],
     input_std: Optional[torch.Tensor],
     grad_clip: Optional[float],
-) -> float:
+) -> Tuple[float, Optional[float], Optional[float]]:
     model.train(mode=train)
     running_loss = 0.0
+    grad_norm_sum = 0.0
+    grad_norm_max = 0.0
+    grad_norm_steps = 0
 
     for x, y in loader:
+        if x.dim() != 5 or y.dim() != 4:
+            raise RuntimeError(
+                f"Unexpected batch shapes: input={tuple(x.shape)} target={tuple(y.shape)}"
+            )
         x = x.to(device)
         y = y.to(device)
+        if not torch.isfinite(x).all():
+            raise RuntimeError("Non-finite values detected in training inputs")
+        if not torch.isfinite(y).all():
+            raise RuntimeError("Non-finite values detected in training targets")
         x_model = normalize_input_batch(x, input_mean, input_std)
 
         with torch.set_grad_enabled(train):
             preds = model(x_model, target_size=(y.shape[-2], y.shape[-1]))
+            if not torch.isfinite(preds).all():
+                raise RuntimeError("Model produced non-finite predictions")
             mse_loss = criterion(preds, y)
             if l1_weight > 0.0:
                 l1_loss = F.l1_loss(preds, y)
                 loss = mse_loss + float(l1_weight) * l1_loss
             else:
                 loss = mse_loss
+            if not bool(torch.isfinite(loss).item()):
+                raise RuntimeError("Non-finite loss encountered during training")
 
             if train:
                 optimizer.zero_grad()
                 loss.backward()
                 if grad_clip is not None and grad_clip > 0:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float(grad_clip))
+                    grad_norm = float(
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float(grad_clip))
+                    )
+                else:
+                    sq_norm = torch.zeros(1, device=device)
+                    for param in model.parameters():
+                        if param.grad is not None:
+                            sq_norm = sq_norm + torch.sum(param.grad.detach() ** 2)
+                    grad_norm = float(torch.sqrt(sq_norm).item())
+                if not np.isfinite(grad_norm):
+                    raise RuntimeError("Non-finite gradient norm encountered")
+                grad_norm_sum += grad_norm
+                grad_norm_max = max(grad_norm_max, grad_norm)
+                grad_norm_steps += 1
                 optimizer.step()
 
         running_loss += float(loss.item())
 
-    return running_loss / max(1, len(loader))
+    mean_loss = running_loss / max(1, len(loader))
+    if not train:
+        return mean_loss, None, None
+
+    grad_norm_mean = grad_norm_sum / max(1, grad_norm_steps)
+    return mean_loss, grad_norm_mean, grad_norm_max
 
 
 def save_training_curve(curve_rows: Sequence[dict], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["epoch", "train_loss", "val_loss", "lr", "is_best"]
+    fieldnames = [
+        "epoch",
+        "train_loss",
+        "val_loss",
+        "lr",
+        "train_grad_norm_mean",
+        "train_grad_norm_max",
+        "is_best",
+    ]
     with output_path.open("w", newline="") as fp:
         writer = csv.DictWriter(fp, fieldnames=fieldnames)
         writer.writeheader()
@@ -419,7 +460,7 @@ def main() -> None:
     curve_rows: List[dict] = []
 
     for epoch in range(1, args.epochs + 1):
-        train_loss = run_epoch(
+        train_loss, train_grad_norm_mean, train_grad_norm_max = run_epoch(
             model,
             train_loader,
             criterion,
@@ -431,7 +472,7 @@ def main() -> None:
             input_std=input_std,
             grad_clip=args.grad_clip,
         )
-        val_loss = run_epoch(
+        val_loss, _, _ = run_epoch(
             model,
             val_loader,
             criterion,
@@ -480,6 +521,8 @@ def main() -> None:
                 "train_loss": f"{train_loss:.8f}",
                 "val_loss": f"{val_loss:.8f}",
                 "lr": f"{current_lr:.8f}",
+                "train_grad_norm_mean": f"{(train_grad_norm_mean or 0.0):.8f}",
+                "train_grad_norm_max": f"{(train_grad_norm_max or 0.0):.8f}",
                 "is_best": int(improved),
             }
         )
@@ -487,7 +530,10 @@ def main() -> None:
         marker = "*" if improved else ""
         print(
             f"Epoch {epoch:03d}/{args.epochs:03d} "
-            f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} lr={current_lr:.6f} {marker}"
+            f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} "
+            f"grad_norm_mean={(train_grad_norm_mean or 0.0):.3f} "
+            f"grad_norm_max={(train_grad_norm_max or 0.0):.3f} "
+            f"lr={current_lr:.6f} {marker}"
         )
 
     artifact_dir = Path(args.training_results_dir)

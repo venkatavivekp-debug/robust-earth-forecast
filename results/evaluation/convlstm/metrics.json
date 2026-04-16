@@ -3,6 +3,9 @@
   "mae": 1.4477692246437073,
   "bias": -0.26252904534339905,
   "correlation": 0.8068801654713967,
+  "pred_variance": 4.505752156178157,
+  "target_variance": 3.996555765469869,
+  "variance_ratio": 1.1274088041277268,
   "model": "convlstm",
   "num_samples": 6,
   "history_length": 3
