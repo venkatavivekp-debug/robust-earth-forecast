@@ -102,6 +102,22 @@ def require_finite(value: float, label: str) -> None:
         raise RuntimeError(f"Non-finite {label}: {value}")
 
 
+def _normalize_row_keys(row: Dict[str, str]) -> Dict[str, str]:
+    return {str(k).strip().lower(): v for k, v in row.items()}
+
+
+def _get_float(row: Dict[str, str], key: str, *, required: bool = True) -> float | None:
+    v = row.get(key)
+    if v is None or str(v).strip() == "":
+        if required:
+            raise RuntimeError(f"Missing '{key}' in baselines_summary.csv row: {sorted(row.keys())}")
+        return None
+    try:
+        return float(v)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid float for '{key}': {v}") from exc
+
+
 def write_experiment_rows(
     *,
     summary_out: Path,
@@ -110,14 +126,16 @@ def write_experiment_rows(
     history: int,
     rows: List[Dict[str, str]],
 ) -> None:
-    required_cols = ["model", "rmse", "mae", "bias", "correlation"]
-    for col in required_cols:
-        if col not in rows[0]:
+    # Treat baselines_summary.csv as the single source of truth, but normalize keys
+    # and standardize the aggregated summary schema for downstream comparisons.
+    norm_rows = [_normalize_row_keys(r) for r in rows]
+    for col in ["model", "rmse", "mae"]:
+        if col not in norm_rows[0]:
             raise RuntimeError(f"Missing '{col}' in baselines_summary.csv for {experiment_name}")
 
     rmse_by_model: Dict[str, float] = {}
-    for r in rows:
-        m = r["model"]
+    for r in norm_rows:
+        m = str(r["model"]).strip()
         rmse_by_model[m] = float(r["rmse"])
         require_finite(rmse_by_model[m], f"rmse[{m}]")
 
@@ -143,26 +161,45 @@ def write_experiment_rows(
         if not exists:
             writer.writeheader()
 
-        for r in rows:
-            model = r["model"]
-            rmse = float(r["rmse"])
-            mae = float(r["mae"])
-            bias = float(r["bias"])
-            corr = float(r["correlation"])
-            for val, lbl in [(rmse, "rmse"), (mae, "mae"), (bias, "bias"), (corr, "correlation")]:
-                require_finite(val, f"{lbl}[{experiment_name}:{model}]")
+        for r in norm_rows:
+            model = str(r["model"]).strip()
+            rmse = _get_float(r, "rmse", required=True)
+            mae = _get_float(r, "mae", required=True)
+            bias = _get_float(r, "bias", required=False)
+            corr = _get_float(r, "correlation", required=False)
 
-            delta = rmse - persistence_rmse
+            require_finite(rmse, f"rmse[{experiment_name}:{model}]")
+            require_finite(mae, f"mae[{experiment_name}:{model}]")
+            if bias is None:
+                bias = float("nan")
+            else:
+                require_finite(bias, f"bias[{experiment_name}:{model}]")
+            if corr is None:
+                corr = float("nan")
+            else:
+                require_finite(corr, f"correlation[{experiment_name}:{model}]")
+
+            # Standardize delta definition, regardless of whether the eval file includes it.
+            delta = float(rmse) - float(persistence_rmse)
+            require_finite(delta, f"delta_vs_persistence[{experiment_name}:{model}]")
+
+            # If evaluation already computed delta, require consistency (do not trust silently).
+            existing_delta = _get_float(r, "delta_vs_persistence", required=False)
+            if existing_delta is not None and abs(float(existing_delta) - float(delta)) > 1e-6:
+                raise RuntimeError(
+                    f"Inconsistent delta_vs_persistence in {experiment_name}:{model}. "
+                    f"eval_csv={existing_delta} recomputed={delta}"
+                )
             writer.writerow(
                 {
                     "experiment": experiment_name,
                     "model": model,
                     "input_set": input_set,
                     "history": int(history),
-                    "rmse": rmse,
-                    "mae": mae,
-                    "bias": bias,
-                    "correlation": corr,
+                    "rmse": float(rmse),
+                    "mae": float(mae),
+                    "bias": float(bias),
+                    "correlation": float(corr),
                     "delta_vs_persistence": delta,
                 }
             )
