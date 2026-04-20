@@ -6,12 +6,14 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+import sys
 from typing import Dict, List, Tuple
 
 import numpy as np
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PYTHON = sys.executable
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,7 +42,17 @@ def run_cmd(cmd: List[str]) -> None:
 
 
 def sanity_forward_pass(era5_path: str, prism_path: str, input_set: str, history: int) -> None:
-    import torch
+    try:
+        import torch
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "PyTorch is not installed in the current Python environment.\n"
+            "Run experiments from the repo virtual environment, for example:\n"
+            "  source .venv/bin/activate\n"
+            "  python scripts/run_core_experiments.py --input-sets t2m --histories 1 3 6 --overwrite\n"
+            "Or:\n"
+            "  .venv/bin/python scripts/run_core_experiments.py --input-sets t2m --histories 1 3 6 --overwrite"
+        ) from exc
 
     from datasets.prism_dataset import ERA5_PRISM_Dataset
     from models.cnn_downscaler import CNNDownscaler
@@ -188,7 +200,7 @@ def main() -> None:
             # Train CNN
             run_cmd(
                 [
-                    "python3",
+                    PYTHON,
                     "training/train_downscaler.py",
                     "--era5-path",
                     args.era5_path,
@@ -238,7 +250,7 @@ def main() -> None:
             # Train ConvLSTM
             run_cmd(
                 [
-                    "python3",
+                    PYTHON,
                     "training/train_downscaler.py",
                     "--era5-path",
                     args.era5_path,
@@ -288,7 +300,7 @@ def main() -> None:
             # Evaluate once for this (input_set, history) with consistent split from checkpoint metadata.
             run_cmd(
                 [
-                    "python3",
+                    PYTHON,
                     "evaluation/evaluate_model.py",
                     "--era5-path",
                     args.era5_path,
