@@ -44,6 +44,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scheduler", type=str, choices=["none", "plateau", "cosine"], default="plateau")
     parser.add_argument("--scheduler-patience", type=int, default=5)
     parser.add_argument("--scheduler-factor", type=float, default=0.5)
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=0,
+        help="Stop training if val_loss does not improve for N epochs (0 disables).",
+    )
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=0)
@@ -462,6 +468,7 @@ def main() -> None:
     best_val_loss = float("inf")
     best_epoch = 0
     curve_rows: List[dict] = []
+    epochs_since_improve = 0
 
     for epoch in range(1, args.epochs + 1):
         train_loss, train_rmse, train_grad_norm_mean, train_grad_norm_max = run_epoch(
@@ -500,6 +507,7 @@ def main() -> None:
         if improved:
             best_val_loss = val_loss
             best_epoch = epoch
+            epochs_since_improve = 0
             torch.save(
                 {
                     "model_type": args.model,
@@ -518,6 +526,8 @@ def main() -> None:
                 },
                 checkpoint_path,
             )
+        else:
+            epochs_since_improve += 1
 
         curve_rows.append(
             {
@@ -538,6 +548,9 @@ def main() -> None:
                 f"grad_norm_mean={float(train_grad_norm_mean):.6f} "
                 f"grad_norm_max={float(train_grad_norm_max):.6f}"
             )
+
+        if int(args.early_stopping_patience) > 0 and epochs_since_improve >= int(args.early_stopping_patience):
+            break
 
     artifact_dir = Path(args.training_results_dir)
     run_name = args.run_name or args.model
