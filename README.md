@@ -77,7 +77,7 @@ Evaluation writes per-model `metrics.json` and a `baselines_summary.csv`. It val
 
 ## Results
 
-Takeaway: **ConvLSTM (history=3) reaches RMSE \(\approx 2.00\), improving over persistence \(\approx 2.36\)** in the `t2m` sweep.
+ConvLSTM (history=3, input=core4) achieves **RMSE 1.57**, improving over persistence (**2.36**) by **33.34%**.
 
 ![Model comparison](docs/images/model_comparison.png)
 
@@ -85,20 +85,18 @@ Takeaway: **ConvLSTM (history=3) reaches RMSE \(\approx 2.00\), improving over p
 
 ![Error map](docs/images/error_map.png)
 
-Example metrics (from a local run; see `results/evaluation/baselines_summary.csv`):
+Example metrics (from the controlled `t2m` vs `core4` grid; see `results/experiments/summary.csv`):
 
 | model | RMSE | MAE |
 | --- | ---: | ---: |
-| persistence | 2.356 | 1.809 |
-| era5_upsampled | 2.356 | 1.809 |
-| linear | 2.321 | 2.004 |
-| cnn | 4.505 | 3.856 |
-| convlstm (history=3) | 2.004 | 1.391 |
+| persistence (history=3) | 2.356 | 1.809 |
+| convlstm (t2m, history=3) | 2.004 | 1.391 |
+| convlstm (core4, history=3) | 1.570 | 1.197 |
 
 Observations (concise interpretation):
-- ConvLSTM (history=3) improves RMSE vs persistence in the `t2m` sweep.
-- CNN does not beat persistence in this `t2m` sweep.
-- Linear improves slightly over persistence, but less than ConvLSTM in this sweep.
+- Multi-variable `core4` improves RMSE vs `t2m` for ConvLSTM at the best setting (history=3).
+- RMSE peaks at **history=3** for ConvLSTM in both input sets; history=6 does not further reduce RMSE.
+- CNN does not beat persistence in this grid.
 - Errors concentrate in high-gradient regions (see the error map).
 
 ## Notebook
