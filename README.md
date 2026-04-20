@@ -75,13 +75,15 @@ python3 evaluation/evaluate_model.py \
 
 Evaluation writes per-model `metrics.json` and a `baselines_summary.csv`. It validates that the CSV and JSON are consistent; mismatches raise `ValueError("Metrics mismatch between JSON and CSV")`.
 
-## Results (example run)
+## Results
 
-The table below is from an example local run with:
-- `input_set=t2m`
-- `history_length=3`
-- CNN trained for ~50 epochs (`checkpoints/cnn_long.pt`)
-- ConvLSTM trained for ~80 epochs (`checkpoints/convlstm_long.pt`)
+![Model comparison](docs/images/model_comparison.png)
+
+![Sample prediction vs target](docs/images/sample_prediction.png)
+
+![Error map](docs/images/error_map.png)
+
+Example metrics (from a local run; see `results/evaluation/baselines_summary.csv`):
 
 | model | RMSE | MAE |
 | --- | ---: | ---: |
@@ -91,19 +93,7 @@ The table below is from an example local run with:
 | cnn | 3.894 | 3.389 |
 | convlstm | 2.043 | 1.554 |
 
-Key observations (for this dataset/configuration):
-- ConvLSTM improves over the persistence baseline on RMSE/MAE.
-- The persistence/upsampled baseline is already strong for `t2m`-only inputs; CNN may not consistently outperform it without richer predictors.
-
-## Results
-
-![Model comparison](docs/images/model_comparison.png)
-
-![Sample prediction vs target](docs/images/sample_prediction.png)
-
-![Error map](docs/images/error_map.png)
-
-Observations:
+Observations (2–4 lines):
 - ConvLSTM improves over persistence on this configuration.
 - CNN underperforms relative to persistence here.
 - Errors are higher in spatial high-gradient regions.
