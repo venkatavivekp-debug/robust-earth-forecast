@@ -533,8 +533,6 @@ def main() -> None:
 
         if train_grad_norm_mean is not None and train_grad_norm_max is not None:
             print(
-                f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} "
-                f"train_rmse={train_rmse:.6f} val_rmse={val_rmse:.6f} "
                 f"grad_norm_mean={float(train_grad_norm_mean):.6f} "
                 f"grad_norm_max={float(train_grad_norm_max):.6f}"
             )
