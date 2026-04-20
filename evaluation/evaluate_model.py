@@ -505,6 +505,10 @@ def main() -> None:
                         target_size=(y.shape[-2], y.shape[-1]),
                     )
 
+                if pred.shape != y.shape:
+                    raise RuntimeError(
+                        f"Prediction/target shape mismatch: pred={tuple(pred.shape)} y={tuple(y.shape)}"
+                    )
                 err = pred - y
                 rmse = float(torch.sqrt(torch.mean(err ** 2)).item())
                 mae = float(torch.mean(torch.abs(err)).item())

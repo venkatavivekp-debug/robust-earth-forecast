@@ -266,6 +266,8 @@ def run_epoch(
             preds = model(x_model, target_size=(y.shape[-2], y.shape[-1]))
             if not torch.isfinite(preds).all():
                 raise RuntimeError("Model produced non-finite predictions")
+            if preds.shape != y.shape:
+                raise RuntimeError(f"Prediction/target shape mismatch: pred={tuple(preds.shape)} y={tuple(y.shape)}")
             mse_loss = criterion(preds, y)
             if l1_weight > 0.0:
                 l1_loss = F.l1_loss(preds, y)
