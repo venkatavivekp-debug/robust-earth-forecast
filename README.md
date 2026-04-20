@@ -95,6 +95,19 @@ Key observations (for this dataset/configuration):
 - ConvLSTM improves over the persistence baseline on RMSE/MAE.
 - The persistence/upsampled baseline is already strong for `t2m`-only inputs; CNN may not consistently outperform it without richer predictors.
 
+## Results
+
+![Model comparison](docs/images/model_comparison.png)
+
+![Sample prediction vs target](docs/images/sample_prediction.png)
+
+![Error map](docs/images/error_map.png)
+
+Observations:
+- ConvLSTM improves over persistence on this configuration.
+- CNN underperforms relative to persistence here.
+- Errors are higher in spatial high-gradient regions.
+
 ## Notebook
 
 Open `notebooks/analysis.ipynb` to reproduce:
