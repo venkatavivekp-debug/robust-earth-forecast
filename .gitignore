@@ -8,6 +8,7 @@ results/
 *.csv
 *.json
 !docs/images/*.png
+!docs/experiments/*.json
 
 # Checkpoints
 checkpoints/

@@ -90,11 +90,11 @@ Example metrics (from a local run; see `results/evaluation/baselines_summary.csv
 | persistence | 2.356 | 1.809 |
 | era5_upsampled | 2.356 | 1.809 |
 | linear | 2.321 | 2.004 |
-| cnn | 3.894 | 3.389 |
-| convlstm | 2.043 | 1.554 |
+| cnn | 4.505 | 3.856 |
+| convlstm (history=3) | 2.004 | 1.391 |
 
 Observations (concise interpretation):
-- ConvLSTM reduces RMSE compared to persistence and yields more temporally consistent predictions.
+- ConvLSTM reduces RMSE compared to persistence once sufficient temporal context is available (history=3 in the t2m sweep).
 - CNN can underperform on this task because it treats the input history as stacked channels and cannot model dynamics explicitly.
 - ConvLSTM helps by updating a hidden state across the input sequence, capturing short-term temporal dependencies.
 - Errors tend to concentrate in regions with strong spatial gradients where small misalignment produces larger absolute differences.

@@ -1,0 +1,27 @@
+{
+  "experiment": "t2m_history_sweep",
+  "era5_path": "data_raw/era5_georgia_temp.nc",
+  "prism_path": "data_raw/prism",
+  "input_set": "t2m",
+  "histories": [1, 3, 6],
+  "epochs_cnn": 80,
+  "epochs_convlstm": 120,
+  "learning_rate": 0.0003,
+  "early_stopping_patience": 12,
+  "split_seed": 42,
+  "seed": 42,
+  "best_model": {
+    "model": "convlstm",
+    "history": 3,
+    "rmse": 2.0036779940128326,
+    "mae": 1.3907933235168457,
+    "bias": -0.0268183462321758,
+    "correlation": 0.5633604712257041,
+    "delta_vs_persistence_rmse": -0.3521371483802795
+  },
+  "notes": [
+    "ConvLSTM beats persistence for history=3 and history=6 in this sweep.",
+    "CNN does not beat persistence in this t2m-only sweep."
+  ]
+}
+
