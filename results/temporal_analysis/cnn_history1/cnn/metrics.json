@@ -1,0 +1,10 @@
+{
+  "rmse": 8.92536175251007,
+  "mae": 8.773939073085785,
+  "bias": -8.773939073085785,
+  "temporal_diff_mae": NaN,
+  "model": "cnn",
+  "num_samples": 4,
+  "history_length": 1,
+  "forecast_horizon": 1
+}
