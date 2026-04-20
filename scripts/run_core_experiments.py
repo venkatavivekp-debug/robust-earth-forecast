@@ -165,6 +165,7 @@ def write_experiment_rows(
 def main() -> None:
     args = parse_args()
     results_root = PROJECT_ROOT / "results" / "experiments"
+    summary_out = results_root / "summary.csv"
 
     for input_set in args.input_sets:
         for history in args.histories:
@@ -316,9 +317,17 @@ def main() -> None:
                     str(eval_dir),
                 ]
             )
-            # Summary aggregation is added in a separate commit to keep changes auditable.
+            rows = read_baselines_summary(eval_dir / "baselines_summary.csv")
+            write_experiment_rows(
+                summary_out=summary_out,
+                experiment_name=experiment_name,
+                input_set=input_set,
+                history=int(history),
+                rows=rows,
+            )
 
     print(f"Wrote experiment outputs under: {results_root}")
+    print(f"Wrote summary CSV: {summary_out}")
 
 if __name__ == "__main__":
     main()
