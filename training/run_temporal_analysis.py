@@ -52,8 +52,6 @@ def main() -> None:
             ckpt = Path("checkpoints") / f"{model}_h{history}.pt"
             eval_dir = results_root / f"{model}_h{history}"
 
-            print(f"Running: model={model}, history={history}")
-
             # TRAIN
             run_cmd([
                 "python3",

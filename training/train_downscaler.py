@@ -368,12 +368,6 @@ def main() -> None:
     checkpoint_path = Path(args.checkpoint_out) if args.checkpoint_out else Path(f"checkpoints/{args.model}_best.pt")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print("Training started")
-    print(f"Model: {args.model}")
-    print(f"Input set: {args.input_set}")
-    print(f"History length: {args.history_length}")
-    print(f"Device: {device.type} | Seed: {args.seed}")
-
     dataset = ERA5_PRISM_Dataset(
         era5_path=str(era5_path),
         prism_path=str(prism_path),
@@ -383,11 +377,6 @@ def main() -> None:
     stats = getattr(dataset, "summary_stats", {})
     candidate_dates = int(stats.get("candidate_dates", len(dataset)))
     usable_samples = len(dataset)
-    print(
-        "Dataset alignment summary: "
-        f"candidate_dates={candidate_dates} usable_samples={usable_samples} "
-        f"history_length={args.history_length}"
-    )
     if usable_samples < 2:
         raise RuntimeError(
             build_insufficient_samples_message(
@@ -444,16 +433,6 @@ def main() -> None:
         scheduler = None
 
     criterion = nn.MSELoss()
-
-    print(
-        f"Dataset: total={len(dataset)} train={len(train_set)} val={len(val_set)} "
-        f"input_shape={tuple(sample_x.shape)} target_shape={tuple(sample_y.shape)}"
-    )
-    print(f"Input normalization mean={input_mean_np.tolist()} std={input_std_np.tolist()}")
-    print(
-        f"Optimizer: Adam lr={args.learning_rate} weight_decay={args.weight_decay} "
-        f"l1_weight={args.l1_weight} grad_clip={args.grad_clip} scheduler={args.scheduler}"
-    )
 
     best_val_loss = float("inf")
     best_epoch = 0
@@ -527,14 +506,11 @@ def main() -> None:
             }
         )
 
-        marker = "*" if improved else ""
-        print(
-            f"Epoch {epoch:03d}/{args.epochs:03d} "
-            f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} "
-            f"grad_norm_mean={(train_grad_norm_mean or 0.0):.3f} "
-            f"grad_norm_max={(train_grad_norm_max or 0.0):.3f} "
-            f"lr={current_lr:.6f} {marker}"
-        )
+        if train_grad_norm_mean is not None and train_grad_norm_max is not None:
+            print(
+                f"grad_norm_mean={float(train_grad_norm_mean):.6f} "
+                f"grad_norm_max={float(train_grad_norm_max):.6f}"
+            )
 
     artifact_dir = Path(args.training_results_dir)
     run_name = args.run_name or args.model
@@ -565,10 +541,7 @@ def main() -> None:
         summary_path,
     )
 
-    print(f"Best checkpoint saved to: {checkpoint_path} (val_loss={best_val_loss:.6f})")
-    print(f"Training log saved to: {curve_path}")
-    print(f"Training summary saved to: {summary_path}")
-    print(f"Loss curve saved to: {plot_path}")
+    # Training artifacts are written to disk; avoid verbose stdout.
 
 
 if __name__ == "__main__":
