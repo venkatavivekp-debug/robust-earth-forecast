@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+import random
 
 import numpy as np
 
@@ -76,6 +77,16 @@ def resolve_device(device_arg: str) -> Any:
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 def split_indices(n_total: int, val_fraction: float, split_seed: int) -> Tuple[List[int], List[int]]:
@@ -376,6 +387,7 @@ def main() -> None:
             f"PRISM path not found: {prism_path}. Run data_pipeline/download_prism.py first."
         )
 
+    set_seed(int(args.split_seed))
     device = resolve_device(args.device)
     results_root = Path(args.results_dir)
     results_root.mkdir(parents=True, exist_ok=True)
