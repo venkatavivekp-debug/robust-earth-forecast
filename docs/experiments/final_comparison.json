@@ -1,0 +1,74 @@
+{
+  "best_config": {
+    "model": "convlstm",
+    "input_set": "core4",
+    "history": 3
+  },
+  "best_rmse": 1.5704300999641418,
+  "improvement_vs_persistence": {
+    "persistence_rmse": 2.355815142393112,
+    "delta_vs_persistence": -0.7853850424289703,
+    "percent_improvement": 33.338143910186055
+  },
+  "best_overall": {
+    "model": "convlstm",
+    "input_set": "core4",
+    "history": 3,
+    "rmse": 1.5704300999641418,
+    "persistence_rmse": 2.355815142393112,
+    "delta_vs_persistence": -0.7853850424289703,
+    "percent_improvement": 33.338143910186055
+  },
+  "best_t2m": {
+    "model": "convlstm",
+    "input_set": "t2m",
+    "history": 3,
+    "rmse": 2.0036779940128326,
+    "persistence_rmse": 2.355815142393112,
+    "delta_vs_persistence": -0.35213714838027954,
+    "percent_improvement": 14.947571311667831
+  },
+  "best_core4": {
+    "model": "convlstm",
+    "input_set": "core4",
+    "history": 3,
+    "rmse": 1.5704300999641418,
+    "persistence_rmse": 2.355815142393112,
+    "delta_vs_persistence": -0.7853850424289703,
+    "percent_improvement": 33.338143910186055
+  },
+  "core4_outperforms_t2m": true,
+  "convlstm_rmse_by_history": [
+    {
+      "input_set": "core4",
+      "history": 1,
+      "rmse": 4.246121346950531
+    },
+    {
+      "input_set": "core4",
+      "history": 3,
+      "rmse": 1.5704300999641418
+    },
+    {
+      "input_set": "core4",
+      "history": 6,
+      "rmse": 2.3035560051600137
+    },
+    {
+      "input_set": "t2m",
+      "history": 1,
+      "rmse": 4.956881523132324
+    },
+    {
+      "input_set": "t2m",
+      "history": 3,
+      "rmse": 2.0036779940128326
+    },
+    {
+      "input_set": "t2m",
+      "history": 6,
+      "rmse": 2.991683403650919
+    }
+  ],
+  "clear_conclusion": "core4 outperforms t2m in this controlled grid (best core4 RMSE=1.5704 vs best t2m RMSE=2.0037). Best overall configuration is ConvLSTM with core4 input and history=3. Versus the matching persistence baseline (RMSE=2.3558), this is an absolute RMSE improvement of 0.7854 (33.34%). RMSE peaks at history=3 for both input sets; history=6 does not further reduce RMSE."
+}
