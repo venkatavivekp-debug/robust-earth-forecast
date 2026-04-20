@@ -74,7 +74,20 @@ def _open_cds_dataset(path: Path, extract_dir: Path) -> xr.Dataset:
     return xr.merge(datasets, compat="override")
 
 
+def _normalize_time_coord(ds: xr.Dataset) -> xr.Dataset:
+    """
+    CDS responses may use `valid_time` instead of `time`.
+    Normalize to a canonical `time` dim/coord for downstream validation.
+    """
+    if "time" in ds.dims or "time" in ds.coords:
+        return ds
+    if "valid_time" in ds.dims or "valid_time" in ds.coords:
+        return ds.rename({"valid_time": "time"})
+    return ds
+
+
 def _validate_era5_dataset(ds: xr.Dataset, *, required_vars: list[str]) -> None:
+    ds = _normalize_time_coord(ds)
     missing = [v for v in required_vars if v not in ds.data_vars]
     if missing:
         raise RuntimeError(f"ERA5 dataset missing required variables: {missing}. Found: {list(ds.data_vars)}")
@@ -106,6 +119,7 @@ def _validate_era5_dataset(ds: xr.Dataset, *, required_vars: list[str]) -> None:
 
 
 def _print_basic_stats(ds: xr.Dataset, vars_to_print: list[str]) -> None:
+    ds = _normalize_time_coord(ds)
     print(f"ERA5 variables: {list(ds.data_vars)}")
     for v in vars_to_print:
         if v not in ds.data_vars:
@@ -227,6 +241,9 @@ def main() -> None:
 
         single_ds = _open_cds_dataset(single_path, tmp_dir_path / "single_extract")
         pressure_ds = _open_cds_dataset(pressure_path, tmp_dir_path / "pressure_extract")
+
+        single_ds = _normalize_time_coord(single_ds)
+        pressure_ds = _normalize_time_coord(pressure_ds)
         level_dim = _infer_level_dim(pressure_ds)
 
         z_var = "z" if "z" in pressure_ds.data_vars else "geopotential"
@@ -255,7 +272,7 @@ def main() -> None:
         d2m_c = single_ds[d2m_var] - 273.15 if float(single_ds[d2m_var].mean(skipna=True)) > 150.0 else single_ds[d2m_var]
         rh2m = _daily_relative_humidity(t2m_c, d2m_c).rename("rh2m")
 
-        output_ds = single_ds.copy()
+        output_ds = _normalize_time_coord(single_ds.copy())
         output_ds["rh2m"] = rh2m
         output_ds["temperature_850"] = pressure_ds[t_var].sel({level_dim: 850}).squeeze(drop=True)
         output_ds["temperature_500"] = pressure_ds[t_var].sel({level_dim: 500}).squeeze(drop=True)
@@ -269,7 +286,7 @@ def main() -> None:
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise RuntimeError("ERA5 merged file is missing or empty after processing")
 
-    ds = xr.open_dataset(output_path)
+    ds = _normalize_time_coord(xr.open_dataset(output_path))
     required = ["t2m", "u10", "v10", "sp"]
     _validate_era5_dataset(ds, required_vars=required)
     _print_basic_stats(ds, vars_to_print=required + ["tp", "rh2m"])
