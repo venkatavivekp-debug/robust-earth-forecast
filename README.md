@@ -93,10 +93,11 @@ Example metrics (from a local run; see `results/evaluation/baselines_summary.csv
 | cnn | 3.894 | 3.389 |
 | convlstm | 2.043 | 1.554 |
 
-Observations (2–4 lines):
-- ConvLSTM improves over persistence on this configuration.
-- CNN underperforms relative to persistence here.
-- Errors are higher in spatial high-gradient regions.
+Observations (concise interpretation):
+- ConvLSTM reduces RMSE compared to persistence and yields more temporally consistent predictions.
+- CNN can underperform on this task because it treats the input history as stacked channels and cannot model dynamics explicitly.
+- ConvLSTM helps by updating a hidden state across the input sequence, capturing short-term temporal dependencies.
+- Errors tend to concentrate in regions with strong spatial gradients where small misalignment produces larger absolute differences.
 
 ## Notebook
 
