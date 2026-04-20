@@ -195,6 +195,45 @@ def compute_metrics(errors: Sequence[Dict[str, float]]) -> Dict[str, float]:
     }
 
 
+def validate_metrics_consistency(results_root: Path, rows: Sequence[Dict[str, Any]]) -> None:
+    fields = [
+        "rmse",
+        "mae",
+        "bias",
+        "correlation",
+        "pred_variance",
+        "target_variance",
+        "variance_ratio",
+        "num_samples",
+        "history_length",
+    ]
+    tol = 1e-6
+
+    for row in rows:
+        model_name = str(row.get("model", ""))
+        if not model_name:
+            raise ValueError("Missing model name in baselines_summary.csv row")
+        metrics_path = results_root / model_name / "metrics.json"
+        if not metrics_path.exists():
+            raise ValueError(f"Missing metrics.json for model '{model_name}' at {metrics_path}")
+
+        metrics = json.loads(metrics_path.read_text())
+        for key in fields:
+            if key not in row or key not in metrics:
+                raise ValueError(f"Missing '{key}' in metrics for model '{model_name}'")
+
+            a = row[key]
+            b = metrics[key]
+            if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                if not np.isfinite(float(a)) or not np.isfinite(float(b)):
+                    raise ValueError(f"Non-finite '{key}' for model '{model_name}'")
+                if abs(float(a) - float(b)) > tol:
+                    raise ValueError("Metrics mismatch between JSON and CSV")
+            else:
+                if str(a) != str(b):
+                    raise ValueError("Metrics mismatch between JSON and CSV")
+
+
 def save_comparison_plot(
     era5_up: np.ndarray,
     prediction: np.ndarray,
@@ -546,6 +585,8 @@ def main() -> None:
         )
         writer.writeheader()
         writer.writerows(model_metrics_rows)
+
+    validate_metrics_consistency(results_root, model_metrics_rows)
 
     if comparison_era5 is not None and comparison_target is not None and comparison_predictions:
         comparison_plot = results_root / "model_comparison.png"
