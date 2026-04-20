@@ -2,170 +2,131 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
-import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Dict, List
 
-import torch
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run input-variable ablation for ConvLSTM")
-    parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
-    parser.add_argument("--prism-path", type=str, default="data_raw/prism")
-    parser.add_argument("--input-sets", nargs="+", choices=["t2m", "core4", "extended"], default=["t2m", "core4", "extended"])
-    parser.add_argument("--model", type=str, choices=["cnn", "convlstm"], default="convlstm")
-    parser.add_argument("--history-length", type=int, default=6)
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--learning-rate", type=float, default=5e-4)
-    parser.add_argument("--weight-decay", type=float, default=1e-5)
-    parser.add_argument("--l1-weight", type=float, default=0.1)
-    parser.add_argument("--grad-clip", type=float, default=1.0)
-    parser.add_argument("--split-seed", type=int, default=42)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"])
-    parser.add_argument("--results-dir", type=str, default="results/ablation")
-    return parser.parse_args()
+    p = argparse.ArgumentParser(description="ERA5 variable ablation study")
+    p.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
+    p.add_argument("--prism-path", type=str, default="data_raw/prism")
+    p.add_argument("--model", type=str, default="convlstm", choices=["cnn", "convlstm"])
+    p.add_argument("--era5-variables", nargs="+", default=["t2m"])
+    p.add_argument("--history-length", type=int, default=3)
+    p.add_argument("--forecast-horizon", type=int, default=1)
+    p.add_argument("--epochs", type=int, default=2)
+    p.add_argument("--batch-size", type=int, default=4)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda", "mps", "auto"])
+    p.add_argument("--results-dir", type=str, default="results/ablation")
+    return p.parse_args()
 
 
 def run_cmd(cmd: List[str]) -> None:
-    proc = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        raise RuntimeError(f"Command failed: {' '.join(cmd)}\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{proc.stdout}\n{proc.stderr}")
+
+
+def read_metrics(path: Path) -> Dict[str, str]:
+    import json
+
+    data = json.loads(path.read_text())
+    return {
+        "rmse": str(data.get("rmse", "")),
+        "mae": str(data.get("mae", "")),
+        "bias": str(data.get("bias", "")),
+        "temporal_diff_mae": str(data.get("temporal_diff_mae", "")),
+    }
 
 
 def main() -> None:
     args = parse_args()
-    out_dir = Path(args.results_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    work_dir = out_dir / "tmp"
-    work_dir.mkdir(parents=True, exist_ok=True)
+    results_root = Path(args.results_dir)
+    results_root.mkdir(parents=True, exist_ok=True)
 
-    rows: List[Dict] = []
-    for input_set in args.input_sets:
-        run_name = f"ablation_{args.model}_{input_set}"
-        ckpt_path = work_dir / f"{run_name}.pt"
-        eval_dir = work_dir / f"eval_{run_name}"
+    rows: List[Dict[str, str]] = []
 
-        print(f"Ablation run: model={args.model} input_set={input_set}")
-        train_cmd = [
-            sys.executable,
-            str(PROJECT_ROOT / "training" / "train_downscaler.py"),
-            "--era5-path",
-            args.era5_path,
-            "--prism-path",
-            args.prism_path,
-            "--input-set",
-            input_set,
-            "--model",
-            args.model,
-            "--history-length",
-            str(args.history_length),
-            "--epochs",
-            str(args.epochs),
-            "--learning-rate",
-            str(args.learning_rate),
-            "--weight-decay",
-            str(args.weight_decay),
-            "--l1-weight",
-            str(args.l1_weight),
-            "--grad-clip",
-            str(args.grad_clip),
-            "--split-seed",
-            str(args.split_seed),
-            "--seed",
-            str(args.seed),
-            "--device",
-            args.device,
-            "--checkpoint-out",
-            str(ckpt_path),
-            "--training-results-dir",
-            "/tmp/robust-earth-forecast-ablation-logs",
-            "--run-name",
-            run_name,
-        ]
-        run_cmd(train_cmd)
+    for var in args.era5_variables:
+        ckpt = Path("checkpoints") / f"{args.model}_{var}.pt"
+        eval_dir = results_root / f"{args.model}_{var}"
 
-        eval_cmd = [
-            sys.executable,
-            str(PROJECT_ROOT / "evaluation" / "evaluate_model.py"),
-            "--era5-path",
-            args.era5_path,
-            "--prism-path",
-            args.prism_path,
-            "--input-set",
-            input_set,
-            "--models",
-            args.model,
-            "--history-length",
-            str(args.history_length),
-            "--split-seed",
-            str(args.split_seed),
-            "--device",
-            args.device,
-            "--results-dir",
-            str(eval_dir),
-        ]
-        if args.model == "cnn":
-            eval_cmd.extend(["--cnn-checkpoint", str(ckpt_path)])
-        else:
-            eval_cmd.extend(["--convlstm-checkpoint", str(ckpt_path)])
+        status = "ok"
+        metrics: Dict[str, str] = {}
 
-        run_cmd(eval_cmd)
+        try:
+            # TRAIN
+            run_cmd([
+                "python3",
+                "training/train_downscaler.py",
+                "--model", args.model,
+                "--era5-path", args.era5_path,
+                "--prism-path", args.prism_path,
+                "--era5-variable", var,
+                "--history-length", str(args.history_length),
+                "--forecast-horizon", str(args.forecast_horizon),
+                "--epochs", str(args.epochs),
+                "--batch-size", str(args.batch_size),
+                "--seed", str(args.seed),
+                "--device", args.device,
+                "--checkpoint-out", str(ckpt),
+                "--training-results-dir", "results/training",
+            ])
 
-        metrics_path = eval_dir / args.model / "metrics.json"
-        if not metrics_path.exists():
-            raise RuntimeError(f"Missing metrics file: {metrics_path}")
-        metrics = json.loads(metrics_path.read_text())
-        checkpoint = torch.load(ckpt_path, map_location="cpu")
+            # EVALUATE
+            run_cmd([
+                "python3",
+                "evaluation/evaluate_model.py",
+                "--models", args.model,
+                "--era5-path", args.era5_path,
+                "--prism-path", args.prism_path,
+                "--era5-variable", var,
+                "--history-length", str(args.history_length),
+                "--forecast-horizon", str(args.forecast_horizon),
+                "--seed", str(args.seed),
+                "--device", args.device,
+                "--results-dir", str(eval_dir),
+                "--cnn-checkpoint", str(ckpt),
+                "--convlstm-checkpoint", str(ckpt),
+            ])
 
-        rows.append(
-            {
-                "model": args.model,
-                "input_set": input_set,
-                "history_length": args.history_length,
-                "epochs": args.epochs,
-                "learning_rate": args.learning_rate,
-                "weight_decay": args.weight_decay,
-                "l1_weight": args.l1_weight,
-                "best_val_loss": float(checkpoint.get("best_val_loss", float("inf"))),
-                "rmse": float(metrics.get("rmse", float("nan"))),
-                "mae": float(metrics.get("mae", float("nan"))),
-                "bias": float(metrics.get("bias", float("nan"))),
-                "correlation": float(metrics.get("correlation", float("nan"))),
-            }
-        )
+            metrics_path = eval_dir / args.model / "metrics.json"
+            if metrics_path.exists():
+                metrics = read_metrics(metrics_path)
 
-        shutil.rmtree(eval_dir, ignore_errors=True)
-        ckpt_path.unlink(missing_ok=True)
+        except Exception as e:
+            status = f"failed: {type(e).__name__}"
 
-    summary_path = out_dir / "ablation_summary.csv"
+        rows.append({
+            "model": args.model,
+            "era5_variable": var,
+            "history_length": str(args.history_length),
+            "forecast_horizon": str(args.forecast_horizon),
+            "status": status,
+            **metrics,
+        })
+
+    out_csv = results_root / "ablation_summary.csv"
+
     fieldnames = [
         "model",
-        "input_set",
+        "era5_variable",
         "history_length",
-        "epochs",
-        "learning_rate",
-        "weight_decay",
-        "l1_weight",
-        "best_val_loss",
+        "forecast_horizon",
+        "status",
         "rmse",
         "mae",
         "bias",
-        "correlation",
+        "temporal_diff_mae",
     ]
-    with summary_path.open("w", newline="") as fp:
-        writer = csv.DictWriter(fp, fieldnames=fieldnames)
+
+    with out_csv.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
 
-    shutil.rmtree(work_dir, ignore_errors=True)
-    print(f"Saved ablation summary: {summary_path}")
+    print(f"Saved: {out_csv}")
 
 
 if __name__ == "__main__":
