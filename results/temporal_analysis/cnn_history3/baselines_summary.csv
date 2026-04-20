@@ -1,2 +1,0 @@
-model,rmse,mae,bias,temporal_diff_mae,num_samples,history_length,forecast_horizon
-cnn,3.000258505344391,2.0613927245140076,-0.7179369814693928,nan,4,3,1

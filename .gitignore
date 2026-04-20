@@ -1,49 +1,22 @@
-# Python and virtual env
-.venv/
-__pycache__/
-*.pyc
-
-# Local caches
-.cache/
-.pytest_cache/
-
-# OS/Jupyter
-.DS_Store
-.ipynb_checkpoints/
-
-# Data and large scientific artifacts
-data/
+# Data
 data_raw/
-data_processed/
 *.nc
-*.bil
-*.tif
-*.tiff
-*.asc
-*.zip
 
-# Model artifacts
+# Results (DO NOT TRACK)
+results/
+*.png
+*.csv
+*.json
+
+# Checkpoints
 checkpoints/
 *.pt
-*.pth
-lightning_logs/
-runs/
 
-# Generated evaluation outputs (track only small curated samples)
-results/evaluation/*
-results/evaluation/*/comparison_*.png
-!results/evaluation/
-!results/evaluation/cnn/
-!results/evaluation/cnn/comparison_1_*.png
-!results/evaluation/cnn/metrics.json
-!results/evaluation/convlstm/
-!results/evaluation/convlstm/comparison_1_*.png
-!results/evaluation/convlstm/metrics.json
-!results/evaluation/baselines_summary.csv
-!results/evaluation/model_comparison.png
+# Temp
+tmp/
+*.log
 
-# Training curves are generated locally
-results/training/*
-
-# Temporary tuning checkpoints
-results/tuning/checkpoints_tmp/
+# Python
+__pycache__/
+*.pyc
+.venv/
