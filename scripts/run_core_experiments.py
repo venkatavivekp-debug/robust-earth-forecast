@@ -180,6 +180,8 @@ def main() -> None:
     args = parse_args()
     results_root = PROJECT_ROOT / "results" / "experiments"
     summary_out = results_root / "summary.csv"
+    if args.overwrite and summary_out.exists():
+        summary_out.unlink()
 
     for input_set in args.input_sets:
         for history in args.histories:
