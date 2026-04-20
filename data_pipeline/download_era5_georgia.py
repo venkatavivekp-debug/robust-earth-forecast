@@ -18,8 +18,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--out",
         type=str,
-        default="data_raw/era5_georgia_temp.nc",
-        help="Output NetCDF path (default: data_raw/era5_georgia_temp.nc)",
+        default="data_raw/era5_georgia_multi.nc",
+        help="Output NetCDF path (default: data_raw/era5_georgia_multi.nc). Does not overwrite era5_georgia_temp.nc",
+    )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate an existing ERA5 NetCDF at --out without downloading",
     )
     parser.add_argument(
         "--area",
@@ -69,6 +74,50 @@ def _open_cds_dataset(path: Path, extract_dir: Path) -> xr.Dataset:
     return xr.merge(datasets, compat="override")
 
 
+def _validate_era5_dataset(ds: xr.Dataset, *, required_vars: list[str]) -> None:
+    missing = [v for v in required_vars if v not in ds.data_vars]
+    if missing:
+        raise RuntimeError(f"ERA5 dataset missing required variables: {missing}. Found: {list(ds.data_vars)}")
+
+    for v in required_vars:
+        da = ds[v]
+        for dim in ("time", "latitude", "longitude"):
+            if dim not in da.dims:
+                raise RuntimeError(f"Variable '{v}' missing required dim '{dim}'. dims={list(da.dims)}")
+        if da.dims != ("time", "latitude", "longitude"):
+            da = da.transpose("time", "latitude", "longitude")
+
+        values = da.values
+        if not np.isfinite(values).all():
+            raise RuntimeError(f"Non-finite values found in ERA5 variable '{v}'")
+
+    time_vals = ds["time"].values if "time" in ds.coords else None
+    if time_vals is None or len(time_vals) < 2:
+        raise RuntimeError("ERA5 dataset has no usable time coordinate")
+    if not np.all(np.diff(time_vals.astype("datetime64[ns]")) > np.timedelta64(0, "ns")):
+        raise RuntimeError("ERA5 time coordinate is not strictly increasing")
+
+    # Ensure shapes match across required variables.
+    shapes = {v: tuple(int(ds[v].sizes[d]) for d in ("time", "latitude", "longitude")) for v in required_vars}
+    first_shape = next(iter(shapes.values()))
+    mismatched = {v: s for v, s in shapes.items() if s != first_shape}
+    if mismatched:
+        raise RuntimeError(f"ERA5 variable shapes do not match: {mismatched}")
+
+
+def _print_basic_stats(ds: xr.Dataset, vars_to_print: list[str]) -> None:
+    print(f"ERA5 variables: {list(ds.data_vars)}")
+    for v in vars_to_print:
+        if v not in ds.data_vars:
+            continue
+        da = ds[v].transpose("time", "latitude", "longitude")
+        arr = da.values.astype(np.float64)
+        print(
+            f"{v}: shape={arr.shape} min={np.nanmin(arr):.4f} max={np.nanmax(arr):.4f} "
+            f"mean={np.nanmean(arr):.4f} std={np.nanstd(arr):.4f}"
+        )
+
+
 def main() -> None:
     args = parse_args()
 
@@ -77,6 +126,16 @@ def main() -> None:
 
     output_path = Path(args.out)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.validate_only:
+        if not output_path.exists():
+            raise FileNotFoundError(f"ERA5 file not found for validation: {output_path}")
+        ds = xr.open_dataset(output_path)
+        required = ["t2m", "u10", "v10", "sp"]
+        _validate_era5_dataset(ds, required_vars=required)
+        _print_basic_stats(ds, vars_to_print=required + ["tp", "rh2m"])
+        print("ERA5 validation OK")
+        return
 
     if output_path.exists() and not args.overwrite:
         print(f"ERA5 file already exists, skipping download: {output_path}")
@@ -176,6 +235,22 @@ def main() -> None:
         t2m_var = "t2m" if "t2m" in single_ds.data_vars else "2m_temperature"
         d2m_var = "d2m" if "d2m" in single_ds.data_vars else "2m_dewpoint_temperature"
 
+        rename_single = {
+            t2m_var: "t2m",
+            d2m_var: "d2m",
+            "u10": "u10",
+            "10m_u_component_of_wind": "u10",
+            "v10": "v10",
+            "10m_v_component_of_wind": "v10",
+            "sp": "sp",
+            "surface_pressure": "sp",
+            "tp": "tp",
+            "total_precipitation": "tp",
+        }
+        applied = {k: v for k, v in rename_single.items() if k in single_ds.data_vars and k != v}
+        if applied:
+            single_ds = single_ds.rename(applied)
+
         t2m_c = single_ds[t2m_var] - 273.15 if float(single_ds[t2m_var].mean(skipna=True)) > 150.0 else single_ds[t2m_var]
         d2m_c = single_ds[d2m_var] - 273.15 if float(single_ds[d2m_var].mean(skipna=True)) > 150.0 else single_ds[d2m_var]
         rh2m = _daily_relative_humidity(t2m_c, d2m_c).rename("rh2m")
@@ -194,6 +269,10 @@ def main() -> None:
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise RuntimeError("ERA5 merged file is missing or empty after processing")
 
+    ds = xr.open_dataset(output_path)
+    required = ["t2m", "u10", "v10", "sp"]
+    _validate_era5_dataset(ds, required_vars=required)
+    _print_basic_stats(ds, vars_to_print=required + ["tp", "rh2m"])
     print(f"Saved ERA5 file to: {output_path}")
 
 
