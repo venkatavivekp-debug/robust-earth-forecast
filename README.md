@@ -77,6 +77,8 @@ Evaluation writes per-model `metrics.json` and a `baselines_summary.csv`. It val
 
 ## Results
 
+Takeaway: **ConvLSTM (history=3) reaches RMSE \(\approx 2.00\), improving over persistence \(\approx 2.36\)** in the `t2m` sweep.
+
 ![Model comparison](docs/images/model_comparison.png)
 
 ![Sample prediction vs target](docs/images/sample_prediction.png)
@@ -94,10 +96,10 @@ Example metrics (from a local run; see `results/evaluation/baselines_summary.csv
 | convlstm (history=3) | 2.004 | 1.391 |
 
 Observations (concise interpretation):
-- ConvLSTM reduces RMSE compared to persistence once sufficient temporal context is available (history=3 in the t2m sweep).
-- CNN can underperform on this task because it treats the input history as stacked channels and cannot model dynamics explicitly.
-- ConvLSTM helps by updating a hidden state across the input sequence, capturing short-term temporal dependencies.
-- Errors tend to concentrate in regions with strong spatial gradients where small misalignment produces larger absolute differences.
+- ConvLSTM (history=3) improves RMSE vs persistence in the `t2m` sweep.
+- CNN does not beat persistence in this `t2m` sweep.
+- Linear improves slightly over persistence, but less than ConvLSTM in this sweep.
+- Errors concentrate in high-gradient regions (see the error map).
 
 ## Notebook
 

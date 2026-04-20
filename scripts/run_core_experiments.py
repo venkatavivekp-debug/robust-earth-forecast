@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import shutil
 import subprocess
 from pathlib import Path
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import numpy as np
 
