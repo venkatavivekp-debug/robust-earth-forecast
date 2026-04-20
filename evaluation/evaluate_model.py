@@ -38,8 +38,8 @@ def parse_args() -> argparse.Namespace:
         "--models",
         type=str,
         nargs="+",
-        default=["persistence", "linear", "cnn", "convlstm"],
-        choices=["persistence", "linear", "cnn", "convlstm"],
+        default=["persistence", "era5_upsampled", "linear", "cnn", "convlstm"],
+        choices=["persistence", "era5_upsampled", "linear", "cnn", "convlstm"],
         help="Models/baselines to evaluate",
     )
     parser.add_argument("--history-length", type=int, default=5)
@@ -55,6 +55,11 @@ def parse_args() -> argparse.Namespace:
         choices=["auto", "cpu", "cuda", "mps"],
     )
     parser.add_argument("--results-dir", type=str, default="results/evaluation")
+    parser.add_argument(
+        "--require-improvement",
+        action="store_true",
+        help="If set, raise an error when CNN/ConvLSTM do not improve over persistence RMSE",
+    )
     return parser.parse_args()
 
 
@@ -486,6 +491,9 @@ def main() -> None:
 
                 if model_name == "persistence":
                     pred = upsample_latest_era5(x, target_size=(y.shape[-2], y.shape[-1]))
+                elif model_name == "era5_upsampled":
+                    # Explicit baseline name for "upsampled ERA5" comparison.
+                    pred = upsample_latest_era5(x, target_size=(y.shape[-2], y.shape[-1]))
                 elif model_name == "linear":
                     if linear_model is None:
                         raise RuntimeError("Linear baseline requested but not fitted")
@@ -588,6 +596,20 @@ def main() -> None:
 
     validate_metrics_consistency(results_root, model_metrics_rows)
 
+    # Baseline comparison check: learned models should improve over persistence baseline.
+    rmse_by_model = {str(r["model"]): float(r["rmse"]) for r in model_metrics_rows if "model" in r and "rmse" in r}
+    if "persistence" in rmse_by_model:
+        base = rmse_by_model["persistence"]
+        for learned in ("cnn", "convlstm"):
+            if learned in rmse_by_model and not (rmse_by_model[learned] < base):
+                msg = (
+                    f"{learned} did not improve over persistence baseline: "
+                    f"rmse={rmse_by_model[learned]:.4f} baseline={base:.4f}"
+                )
+                if args.require_improvement:
+                    raise RuntimeError(msg)
+                print(f"Warning: {msg}")
+
     if comparison_era5 is not None and comparison_target is not None and comparison_predictions:
         comparison_plot = results_root / "model_comparison.png"
         save_model_comparison(
@@ -602,7 +624,7 @@ def main() -> None:
         save_visual_diagnostics(
             prediction=comparison_predictions[preferred_model],
             target=comparison_target,
-            output_dir=PROJECT_ROOT / "results" / "visualizations",
+            output_dir=results_root,
         )
 
     print(f"Saved evaluation summary CSV: {summary_csv}")

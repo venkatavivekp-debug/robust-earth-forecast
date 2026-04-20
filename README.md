@@ -66,7 +66,7 @@ Training writes:
 
 ```bash
 python3 evaluation/evaluate_model.py \
-  --models persistence linear cnn convlstm \
+  --models persistence era5_upsampled linear cnn convlstm \
   --input-set t2m \
   --history-length 3 \
   --num-samples 8 \
@@ -74,6 +74,34 @@ python3 evaluation/evaluate_model.py \
 ```
 
 Evaluation writes per-model `metrics.json` and a `baselines_summary.csv`. It validates that the CSV and JSON are consistent; mismatches raise `ValueError("Metrics mismatch between JSON and CSV")`.
+
+## Results (example run)
+
+The table below is from an example local run with:
+- `input_set=t2m`
+- `history_length=3`
+- CNN trained for ~50 epochs (`checkpoints/cnn_long.pt`)
+- ConvLSTM trained for ~80 epochs (`checkpoints/convlstm_long.pt`)
+
+| model | RMSE | MAE |
+| --- | ---: | ---: |
+| persistence | 2.356 | 1.809 |
+| era5_upsampled | 2.356 | 1.809 |
+| linear | 2.321 | 2.004 |
+| cnn | 3.894 | 3.389 |
+| convlstm | 2.043 | 1.554 |
+
+Key observations (for this dataset/configuration):
+- ConvLSTM improves over the persistence baseline on RMSE/MAE.
+- The persistence/upsampled baseline is already strong for `t2m`-only inputs; CNN may not consistently outperform it without richer predictors.
+
+## Notebook
+
+Open `notebooks/analysis.ipynb` to reproduce:
+- ERA5 vs PRISM visualization
+- model predictions vs ground truth
+- baseline vs model comparison
+- metrics table and brief observations
 
 ## Experiments
 

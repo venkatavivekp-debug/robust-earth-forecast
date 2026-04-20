@@ -199,6 +199,10 @@ def compute_input_stats(dataset: Any, indices: Sequence[int]) -> Tuple[np.ndarra
     mean = sum_x / max(1, n_values)
     var = np.maximum((sum_x2 / max(1, n_values)) - (mean ** 2), 1e-6)
     std = np.sqrt(var)
+    if not np.isfinite(mean).all() or not np.isfinite(std).all():
+        raise RuntimeError("Non-finite mean/std encountered while computing input normalization stats")
+    if (std <= 0).any():
+        raise RuntimeError("Non-positive std encountered while computing input normalization stats")
     return mean.astype(np.float32), std.astype(np.float32)
 
 
@@ -210,11 +214,20 @@ def normalize_input_batch(
     if mean is None or std is None:
         return x
 
+    if not torch.isfinite(mean).all() or not torch.isfinite(std).all():
+        raise RuntimeError("Non-finite mean/std provided for normalization")
+    std = std.clamp(min=1e-6)
+
     if x.dim() == 5:
-        return (x - mean.view(1, 1, -1, 1, 1)) / std.view(1, 1, -1, 1, 1)
-    if x.dim() == 4:
-        return (x - mean.view(1, -1, 1, 1)) / std.view(1, -1, 1, 1)
-    raise ValueError(f"Unsupported input tensor shape for normalization: {tuple(x.shape)}")
+        out = (x - mean.view(1, 1, -1, 1, 1)) / std.view(1, 1, -1, 1, 1)
+    elif x.dim() == 4:
+        out = (x - mean.view(1, -1, 1, 1)) / std.view(1, -1, 1, 1)
+    else:
+        raise ValueError(f"Unsupported input tensor shape for normalization: {tuple(x.shape)}")
+
+    if not torch.isfinite(out).all():
+        raise RuntimeError("Non-finite values produced by input normalization")
+    return out
 
 
 def run_epoch(
@@ -228,9 +241,10 @@ def run_epoch(
     input_mean: Optional[torch.Tensor],
     input_std: Optional[torch.Tensor],
     grad_clip: Optional[float],
-) -> Tuple[float, Optional[float], Optional[float]]:
+) -> Tuple[float, float, Optional[float], Optional[float]]:
     model.train(mode=train)
     running_loss = 0.0
+    running_mse = 0.0
     grad_norm_sum = 0.0
     grad_norm_max = 0.0
     grad_norm_steps = 0
@@ -282,13 +296,18 @@ def run_epoch(
                 optimizer.step()
 
         running_loss += float(loss.item())
+        running_mse += float(mse_loss.item())
 
     mean_loss = running_loss / max(1, len(loader))
+    mean_mse = running_mse / max(1, len(loader))
+    rmse = float(np.sqrt(max(mean_mse, 0.0)))
+    if not np.isfinite(mean_loss) or not np.isfinite(rmse):
+        raise RuntimeError("Non-finite epoch metrics encountered")
     if not train:
-        return mean_loss, None, None
+        return mean_loss, rmse, None, None
 
     grad_norm_mean = grad_norm_sum / max(1, grad_norm_steps)
-    return mean_loss, grad_norm_mean, grad_norm_max
+    return mean_loss, rmse, grad_norm_mean, grad_norm_max
 
 
 def save_training_curve(curve_rows: Sequence[dict], output_path: Path) -> None:
@@ -297,6 +316,8 @@ def save_training_curve(curve_rows: Sequence[dict], output_path: Path) -> None:
         "epoch",
         "train_loss",
         "val_loss",
+        "train_rmse",
+        "val_rmse",
         "lr",
         "train_grad_norm_mean",
         "train_grad_norm_max",
@@ -441,7 +462,7 @@ def main() -> None:
     curve_rows: List[dict] = []
 
     for epoch in range(1, args.epochs + 1):
-        train_loss, train_grad_norm_mean, train_grad_norm_max = run_epoch(
+        train_loss, train_rmse, train_grad_norm_mean, train_grad_norm_max = run_epoch(
             model,
             train_loader,
             criterion,
@@ -453,7 +474,7 @@ def main() -> None:
             input_std=input_std,
             grad_clip=args.grad_clip,
         )
-        val_loss, _, _ = run_epoch(
+        val_loss, val_rmse, _, _ = run_epoch(
             model,
             val_loader,
             criterion,
@@ -501,6 +522,8 @@ def main() -> None:
                 "epoch": epoch,
                 "train_loss": f"{train_loss:.8f}",
                 "val_loss": f"{val_loss:.8f}",
+                "train_rmse": f"{train_rmse:.8f}",
+                "val_rmse": f"{val_rmse:.8f}",
                 "lr": f"{current_lr:.8f}",
                 "train_grad_norm_mean": f"{(train_grad_norm_mean or 0.0):.8f}",
                 "train_grad_norm_max": f"{(train_grad_norm_max or 0.0):.8f}",
@@ -510,6 +533,8 @@ def main() -> None:
 
         if train_grad_norm_mean is not None and train_grad_norm_max is not None:
             print(
+                f"train_loss={train_loss:.6f} val_loss={val_loss:.6f} "
+                f"train_rmse={train_rmse:.6f} val_rmse={val_rmse:.6f} "
                 f"grad_norm_mean={float(train_grad_norm_mean):.6f} "
                 f"grad_norm_max={float(train_grad_norm_max):.6f}"
             )
