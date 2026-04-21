@@ -9,7 +9,7 @@ from typing import Dict, List
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="ERA5 variable ablation study")
-    p.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
+    p.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_multi.nc")
     p.add_argument("--prism-path", type=str, default="data_raw/prism")
     p.add_argument("--model", type=str, default="convlstm", choices=["cnn", "convlstm"])
     p.add_argument("--era5-variables", nargs="+", default=["t2m"])

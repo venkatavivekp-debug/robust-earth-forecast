@@ -1,6 +1,6 @@
 {
   "experiment": "t2m_history_sweep",
-  "era5_path": "data_raw/era5_georgia_temp.nc",
+  "era5_path": "data_raw/era5_georgia_multi.nc",
   "prism_path": "data_raw/prism",
   "input_set": "t2m",
   "histories": [1, 3, 6],

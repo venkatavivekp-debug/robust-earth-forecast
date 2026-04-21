@@ -30,7 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train ERA5->PRISM downscaling models (CNN or ConvLSTM)")
-    parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
+    parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_multi.nc")
     parser.add_argument("--prism-path", type=str, default="data_raw/prism")
     parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
     parser.add_argument("--model", type=str, choices=["cnn", "convlstm"], default="convlstm")

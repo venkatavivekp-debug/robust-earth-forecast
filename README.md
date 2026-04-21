@@ -99,6 +99,8 @@ Observations (concise interpretation):
 - CNN does not beat persistence in this grid.
 - Errors concentrate in high-gradient regions (see the error map).
 
+Important note: some configurations underperform persistence (e.g., CNN in this grid, and ConvLSTM with history=1). These runs are included for honest comparison.
+
 ### Error Analysis
 
 For **ConvLSTM + core4 + history=3**, we compared mean absolute error to a simple **PRISM spatial-gradient** proxy (finite differences on the target field; see `scripts/spatial_error_analysis.py` and `docs/experiments/error_analysis.json`).

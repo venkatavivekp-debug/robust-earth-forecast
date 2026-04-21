@@ -9,7 +9,7 @@ from typing import Dict, List
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Temporal history-length comparison for CNN and ConvLSTM")
-    p.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
+    p.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_multi.nc")
     p.add_argument("--prism-path", type=str, default="data_raw/prism")
     p.add_argument("--histories", nargs="+", type=int, default=[1, 3, 6])
     p.add_argument("--models", nargs="+", default=["cnn", "convlstm"], choices=["cnn", "convlstm"])

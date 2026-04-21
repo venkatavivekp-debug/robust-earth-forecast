@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
         "--out",
         type=str,
         default="data_raw/era5_georgia_multi.nc",
-        help="Output NetCDF path (default: data_raw/era5_georgia_multi.nc). Does not overwrite era5_georgia_temp.nc",
+        help="Output NetCDF path (default: data_raw/era5_georgia_multi.nc). Does not overwrite era5_georgia_multi.nc unless --overwrite is set",
     )
     parser.add_argument(
         "--validate-only",

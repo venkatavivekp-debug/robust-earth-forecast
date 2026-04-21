@@ -19,7 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run core ERA5→PRISM experiments with fixed splits and unified evaluation.")
-    p.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_temp.nc")
+    p.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_multi.nc")
     p.add_argument("--prism-path", type=str, default="data_raw/prism")
     p.add_argument("--input-sets", type=str, nargs="+", default=["t2m", "core4"], choices=["t2m", "core4"])
     p.add_argument("--histories", type=int, nargs="+", default=[1, 3, 6])
