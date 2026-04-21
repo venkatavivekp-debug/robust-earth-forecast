@@ -79,6 +79,8 @@ Evaluation writes per-model `metrics.json` and a `baselines_summary.csv`. It val
 
 ConvLSTM (history=3, input=core4) achieves **RMSE 1.57**, improving over persistence (**2.36**) by **33.34%**.
 
+Warning: the default example dataset is **small** (18 usable samples; validation split size is 4 for the best checkpoint), so reported metrics can have noticeable variance.
+
 ![Model comparison](docs/images/model_comparison.png)
 
 ![Sample prediction vs target](docs/images/sample_prediction.png)
@@ -93,13 +95,17 @@ Example metrics (from the controlled `t2m` vs `core4` grid; see `results/experim
 | convlstm (t2m, history=3) | 2.004 | 1.391 |
 | convlstm (core4, history=3) | 1.570 | 1.197 |
 
-Observations (concise interpretation):
-- Multi-variable `core4` improves RMSE vs `t2m` for ConvLSTM at the best setting (history=3).
-- RMSE peaks at **history=3** for ConvLSTM in both input sets; history=6 does not further reduce RMSE.
-- CNN does not beat persistence in this grid.
-- Errors concentrate in high-gradient regions (see the error map).
+Best result:
+- **ConvLSTM + core4 + history=3** is best in this grid (RMSE 1.57; +33% vs persistence at the same history).
 
-Important note: some configurations underperform persistence (e.g., CNN in this grid, and ConvLSTM with history=1). These runs are included for honest comparison.
+Undertrained / worse-than-persistence runs (kept for transparency):
+- CNN is worse than persistence for all three histories in this grid.
+- ConvLSTM with history=1 is worse than persistence for both `t2m` and `core4`.
+
+Observations (concise):
+- Multi-variable `core4` improves RMSE vs `t2m` for ConvLSTM at the best setting (history=3).
+- Temporal context matters: history=3 is optimal here; history=6 does not improve further.
+- Errors concentrate in high-gradient regions (see the error map).
 
 ### Error Analysis
 

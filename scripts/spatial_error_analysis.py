@@ -114,7 +114,10 @@ def main() -> None:
         train_indices = [int(i) for i in ckpt_train_indices]
         val_indices = [int(i) for i in ckpt_val_indices]
     else:
-        train_indices, val_indices = split_indices(len(dataset), 0.2, int(args.split_seed))
+        raise RuntimeError(
+            "Spatial analysis requires checkpoint split metadata (train_indices/val_indices) "
+            "to avoid implicit random splits."
+        )
 
     eval_indices = val_indices[: max(1, min(int(args.num_samples), len(val_indices)))]
 

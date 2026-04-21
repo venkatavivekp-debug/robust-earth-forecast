@@ -398,6 +398,7 @@ def main() -> None:
         prism_path=str(prism_path),
         history_length=args.history_length,
         input_set=args.input_set,
+        verbose=False,
     )
     stats = getattr(dataset, "summary_stats", {})
     candidate_dates = int(stats.get("candidate_dates", len(dataset)))
@@ -468,8 +469,16 @@ def main() -> None:
             raise RuntimeError("Checkpoint split metadata is out of bounds for the current dataset")
         print("Using train/validation split stored in checkpoint metadata")
     else:
+        # Research-grade consistency: if evaluating learned models, require split metadata
+        # from checkpoints rather than implicitly generating a split.
+        requested_learned = any(m in ("cnn", "convlstm") for m in args.models)
+        if requested_learned and learned_models:
+            raise RuntimeError(
+                "Learned model evaluation requires train/val split metadata in the checkpoint(s). "
+                "Re-train with training/train_downscaler.py and ensure checkpoints include train_indices/val_indices."
+            )
         train_indices, val_indices = split_indices(len(dataset), args.val_fraction, args.split_seed)
-        print("Using split generated from --val-fraction and --split-seed")
+        print("Using split generated from --val-fraction and --split-seed (baselines only)")
 
     eval_indices = val_indices[: max(1, min(args.num_samples, len(val_indices)))]
     if linear_model == "__PENDING__":

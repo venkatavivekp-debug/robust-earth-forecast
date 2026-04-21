@@ -404,6 +404,7 @@ def main() -> None:
         prism_path=str(prism_path),
         history_length=args.history_length,
         input_set=args.input_set,
+        verbose=False,
     )
     stats = getattr(dataset, "summary_stats", {})
     candidate_dates = int(stats.get("candidate_dates", len(dataset)))
