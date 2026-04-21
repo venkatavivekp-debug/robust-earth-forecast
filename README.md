@@ -99,6 +99,14 @@ Observations (concise interpretation):
 - CNN does not beat persistence in this grid.
 - Errors concentrate in high-gradient regions (see the error map).
 
+### Error Analysis
+
+For **ConvLSTM + core4 + history=3**, we compared mean absolute error to a simple **PRISM spatial-gradient** proxy (finite differences on the target field; see `scripts/spatial_error_analysis.py` and `docs/experiments/error_analysis.json`).
+
+- The model is **relatively accurate in smooth regions** (low mean absolute error where gradients are small).
+- Mean absolute error shows only a **modest positive association** with mean gradient magnitude (**Pearson r ≈ 0.08** on per-pixel maps averaged over validation samples; pooled r ≈ 0.04). High-gradient areas contribute **somewhat**, but **do not dominate** total error.
+- This supports a limitation in **fine-scale spatial variability** (sharp transitions are harder), while **other factors** (temporal context, bias, misalignment) still matter.
+
 ## Notebook
 
 Open `notebooks/analysis.ipynb` to reproduce:

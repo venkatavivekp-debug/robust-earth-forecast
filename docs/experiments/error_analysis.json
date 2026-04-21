@@ -1,0 +1,20 @@
+{
+  "model": "convlstm",
+  "input_set": "core4",
+  "history_length": 3,
+  "checkpoint": "results/experiments/core4_h3/checkpoints/convlstm_best.pt",
+  "num_samples_used": 4,
+  "eval_indices": [
+    6,
+    12,
+    16,
+    17
+  ],
+  "correlation_gradient_error": 0.08117873328669341,
+  "correlation_gradient_error_spatial_mean_maps": 0.08117873328669341,
+  "correlation_gradient_error_pooled_pixels": 0.043330134082475755,
+  "mean_error": 1.1968088869668774,
+  "max_error": 10.428970336914062,
+  "high_error_percentile_threshold": 1.847062110900879,
+  "conclusion_text": "There is a small positive association between mean gradient and mean absolute error (r=0.081 on per-pixel mean maps; pooled over all pixels and samples r=0.043). High-gradient areas contribute modestly but do not explain most error variance; other factors (temporal context, systematic bias, or small misalignments) remain important."
+}
