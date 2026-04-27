@@ -8,6 +8,16 @@
 - Scripted sweeps over input channel sets (`t2m` vs `core4`) and history length, with RMSE/MAE logged against persistence.
 - Documented behavior where learned models sometimes fail to beat persistence when history is too short or the setup is unfavorable.
 
+## What the experiments actually confirm
+
+These points follow only from the archived metrics in `docs/experiments/final_comparison.json` and the companion error map analysis, not from external literature.
+
+- **Persistence is a strong baseline** at the recorded persistence RMSE (~2.356): upsampled latest ERA5 is already informative for daily temperature on this domain when data are scarce.
+- **ConvLSTM uses temporal structure**: at **history 1** its RMSE is far above persistence for both `t2m` and `core4`; at **history 3** it drops below persistence for both input sets—so a short multi-day window matters for this model class here.
+- **Multi-variable input gives a clear gain at the best history**: `core4` at history 3 beats `t2m` at history 3 (lower RMSE), consistent with winds and surface pressure carrying usable signal beyond 2 m temperature alone.
+- **Performance is unstable across history length**: history 6 is worse than history 3 for ConvLSTM RMSE on both input sets even where it still beats persistence (`core4`) or fails (`t2m`)—not a smooth “more context is better” curve.
+- **Spatial learning is weak in the sense tested**: gradient–error correlation on the best ConvLSTM run is small in `docs/experiments/error_analysis.json`, so residual error is not dominated by a simple “steep slopes” story; fine-grid structure remains hard.
+
 ## Why it often struggles to beat persistence
 
 - **Persistence is strong when the target day is close to the last coarse input in Kelvin space.** Upsampling the latest ERA5 frame already tracks synoptic-scale temperature; gains require predicting corrections at PRISM resolution and correcting reanalysis–observation differences.
