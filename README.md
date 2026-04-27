@@ -68,25 +68,23 @@ Primary grid: **`scripts/run_core_experiments.py`** with **`t2m` and `core4`**, 
 
 ## Results
 
-From **`docs/experiments/final_comparison.json`** (same regime as the table). Persistence RMSE at history 3: **2.356**. **CNN** remained **worse than persistence** for all histories in that grid. **ConvLSTM at history 1** was **worse than persistence** for both input sets.
+Full grid (Persistence + ConvLSTM RMSE, beat flags): **[`docs/experiments/results_summary.md`](docs/experiments/results_summary.md)** — values are copied from **`docs/experiments/final_comparison.json`**.
 
-| setup | ConvLSTM RMSE | vs persistence (2.356) |
-| --- | ---: | --- |
-| `t2m`, history 3 | 2.004 | lower RMSE |
-| `core4`, history 3 | 1.570 | lower RMSE |
-| `core4`, history 6 | 2.304 | higher RMSE |
-| `t2m`, history 6 | 2.992 | higher RMSE |
-
-**`core4` beat `t2m` for ConvLSTM at history 3**; **history 6 did not improve on history 3** here.
+Key numbers from that JSON: persistence RMSE **2.355815142393112**; best ConvLSTM cell **`core4`, history 3**, RMSE **1.5704300999641418**; worst ConvLSTM rows **history 1** (e.g. **4.246121346950531** for `core4`, **4.956881523132324** for `t2m`). **CNN** is not stored in that JSON; the same sweep reports CNN **below persistence** for every cell (see per-run `results/experiments/*/evaluation/` when regenerated).
 
 Figures: `docs/images/model_comparison.png`, `sample_prediction.png`, `error_map.png`.
 
 ## Observations
 
-- **History**: Moving from **1 → 3** days helped ConvLSTM a lot; **6** was **worse than 3** on this split—worth treating as a **local** optimum, not a guarantee.  
-- **Training setup**: Same code yields **below-persistence** runs for weak configs; **hyperparameters and input set** matter.  
-- **Sample size**: **18** pairs and **four** validation samples make RMSE a **rough** number; another month or another seed can move ordering.  
-- **Spatial structure**: Gradient–error correlation from `docs/experiments/error_analysis.json` is **small** (**r ≈ 0.08** on mean maps, **≈ 0.04** pooled); fine-scale error is real but **not fully explained** by “steep terrain only.”
+- **Failure cases**: ConvLSTM at **history 1** is far **above** persistence for both `t2m` and `core4`; **`t2m` + history 6** is **above** persistence (**2.992** vs **2.356**). **CNN** did not beat persistence for any history in that experiment. These are as important as the best cell.  
+- **Why persistence is hard to beat**: the baseline upsamples the **latest** coarse 2 m temperature; for daily fields it already tracks large-scale warmth anomalies, so the model must learn **residual** fine-grid and product differences with **very few** target days.  
+- **History 6 vs 3**: RMSE **worsens** from history 3 → 6 for ConvLSTM on **both** input sets, even though **`core4`+6** still **beats** persistence marginally—**longer context is not reliably better** here.  
+- **Noise**: **18** aligned samples / **four** validation points → treat ordering between close RMSEs cautiously.  
+- **Space**: gradient–error **r ≈ 0.08** (mean maps; **≈ 0.04** pooled) in `docs/experiments/error_analysis.json` — weak link, so **sub-grid detail** is not “solved” by this baseline.
+
+## Reproducibility
+
+Run `python3 scripts/run_core_experiments.py --input-sets t2m core4 --histories 1 3 6 --split-seed 42 --overwrite`; artifacts live under `results/experiments/<input>_h<h>/` (gitignored). Check committed JSON: `python3 scripts/validate_results.py`. Print the same RMSE grid: `python3 scripts/summarize_results.py`. After a new sweep, export an updated `final_comparison.json` and refresh `docs/experiments/results_summary.md` if you want the doc table to match.
 
 ## Limitations
 
