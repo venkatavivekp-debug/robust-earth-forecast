@@ -27,7 +27,13 @@ def parse_args() -> argparse.Namespace:
         "--days",
         type=int,
         default=3,
-        help="Number of consecutive days to download (default: 3)",
+        help="Number of consecutive days from --start-date (ignored if --end-date is set)",
+    )
+    parser.add_argument(
+        "--end-date",
+        type=str,
+        default=None,
+        help="Inclusive end YYYYMMDD; if set with --start-date, downloads every day in the inclusive range (overrides --days)",
     )
     parser.add_argument(
         "--variable",
@@ -170,8 +176,23 @@ def download_single_date(
 def main() -> None:
     args = parse_args()
 
-    if args.days < 1:
-        raise ValueError("--days must be >= 1")
+    try:
+        start_date = datetime.strptime(args.start_date, "%Y%m%d")
+    except ValueError as exc:
+        raise ValueError("--start-date must be in YYYYMMDD format") from exc
+
+    if args.end_date is not None:
+        try:
+            end_date = datetime.strptime(args.end_date, "%Y%m%d")
+        except ValueError as exc:
+            raise ValueError("--end-date must be in YYYYMMDD format") from exc
+        n_days = (end_date - start_date).days + 1
+        if n_days < 1:
+            raise ValueError("--end-date must be on or after --start-date")
+    else:
+        if args.days < 1:
+            raise ValueError("--days must be >= 1")
+        n_days = int(args.days)
 
     # Fail fast when network/DNS is unavailable.
     try:
@@ -181,18 +202,13 @@ def main() -> None:
             "Cannot resolve services.nacse.org. Check internet/DNS connectivity before downloading PRISM."
         ) from exc
 
-    try:
-        start_date = datetime.strptime(args.start_date, "%Y%m%d")
-    except ValueError as exc:
-        raise ValueError("--start-date must be in YYYYMMDD format") from exc
-
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded_dates: list[str] = []
     skipped_dates: list[str] = []
 
-    for offset in range(args.days):
+    for offset in range(n_days):
         date_value = start_date + timedelta(days=offset)
         date_str = date_value.strftime("%Y%m%d")
 
