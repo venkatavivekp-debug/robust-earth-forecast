@@ -1,0 +1,5 @@
+{
+  "era5_path": "data_raw/medium/era5_georgia_multi.nc",
+  "prism_path": "data_raw/medium/prism",
+  "description": "Extended calendar range; populate with download_era5_georgia.py / download_prism.py pointing to these paths."
+}

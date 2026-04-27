@@ -19,8 +19,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Lightweight hyperparameter sweep for ERA5->PRISM models")
-    parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_multi.nc")
-    parser.add_argument("--prism-path", type=str, default="data_raw/prism")
+    parser.add_argument(
+        "--dataset-version",
+        type=str,
+        choices=["small", "medium"],
+        default="small",
+        help="ERA5/PRISM defaults from datasets/<version>/paths.json when paths omitted",
+    )
+    parser.add_argument("--era5-path", type=str, default=None)
+    parser.add_argument("--prism-path", type=str, default=None)
     parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
     parser.add_argument("--models", nargs="+", choices=["cnn", "convlstm"], default=["cnn", "convlstm"])
     parser.add_argument("--history-lengths", nargs="+", type=int, default=[3, 6])
@@ -98,6 +105,10 @@ def main() -> None:
         raise ModuleNotFoundError("PyTorch is required for tuning. Install dependencies with: pip install -r requirements.txt")
 
     args = parse_args()
+
+    from datasets.dataset_paths import apply_dataset_version_to_args
+
+    apply_dataset_version_to_args(args)
 
     results_dir = Path(args.results_dir)
     ckpt_dir = results_dir / "checkpoints_tmp"

@@ -1,0 +1,5 @@
+{
+  "era5_path": "data_raw/era5_georgia_multi.nc",
+  "prism_path": "data_raw/prism",
+  "description": "Original demo-scale overlap (e.g. ~January 2023); same defaults as before versioning."
+}

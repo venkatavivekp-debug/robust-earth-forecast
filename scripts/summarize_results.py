@@ -77,11 +77,19 @@ def main() -> None:
         default=None,
         help="Write markdown table to this path (only final_comparison grid)",
     )
+    parser.add_argument(
+        "--dataset-version",
+        type=str,
+        choices=["small", "medium"],
+        default="small",
+        help="Which archived final_comparison JSON to read (small vs medium suffix)",
+    )
     args = parser.parse_args()
 
     root = project_root()
     exp_dir = args.experiments_dir or (root / "docs" / "experiments")
-    final_path = exp_dir / "final_comparison.json"
+    fname = "final_comparison.json" if args.dataset_version == "small" else "final_comparison_medium.json"
+    final_path = exp_dir / fname
     if not final_path.exists():
         raise SystemExit(f"Missing {final_path}")
 
@@ -97,11 +105,12 @@ def main() -> None:
         if args.markdown:
             print(md)
     else:
-        print(f"Source: {final_path.relative_to(root)}")
+        print(f"Source: {final_path.relative_to(root)} ({final_path.name})")
         print(format_table_terminal(header, rows))
 
     # Optional: list other JSON files without parsing deeply
-    others = sorted(p for p in exp_dir.glob("*.json") if p.name != "final_comparison.json")
+    skip = {"final_comparison.json", "final_comparison_medium.json"}
+    others = sorted(p for p in exp_dir.glob("*.json") if p.name not in skip)
     if others:
         print("\nOther JSON in experiments dir:")
         for p in others:

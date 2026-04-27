@@ -30,8 +30,25 @@ if str(PROJECT_ROOT) not in sys.path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train ERA5->PRISM downscaling models (CNN or ConvLSTM)")
-    parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_multi.nc")
-    parser.add_argument("--prism-path", type=str, default="data_raw/prism")
+    parser.add_argument(
+        "--dataset-version",
+        type=str,
+        choices=["small", "medium"],
+        default="small",
+        help="Select ERA5/PRISM paths from datasets/<version>/paths.json when paths are omitted",
+    )
+    parser.add_argument(
+        "--era5-path",
+        type=str,
+        default=None,
+        help="ERA5 NetCDF path (default: from --dataset-version)",
+    )
+    parser.add_argument(
+        "--prism-path",
+        type=str,
+        default=None,
+        help="PRISM directory path (default: from --dataset-version)",
+    )
     parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
     parser.add_argument("--model", type=str, choices=["cnn", "convlstm"], default="convlstm")
     parser.add_argument("--history-length", type=int, default=5)
@@ -380,7 +397,10 @@ def main() -> None:
             "PyTorch is required to run training. Install dependencies with: pip install -r requirements.txt"
         )
 
+    from datasets.dataset_paths import apply_dataset_version_to_args
     from datasets.prism_dataset import ERA5_PRISM_Dataset
+
+    apply_dataset_version_to_args(args)
 
     set_seed(args.seed)
     device = resolve_device(args.device)

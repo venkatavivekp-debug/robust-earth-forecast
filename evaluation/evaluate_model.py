@@ -32,8 +32,15 @@ def _configure_plot_cache() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate ERA5->PRISM downscaling baselines and temporal models")
-    parser.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_multi.nc")
-    parser.add_argument("--prism-path", type=str, default="data_raw/prism")
+    parser.add_argument(
+        "--dataset-version",
+        type=str,
+        choices=["small", "medium"],
+        default="small",
+        help="Select ERA5/PRISM paths from datasets/<version>/paths.json when paths are omitted",
+    )
+    parser.add_argument("--era5-path", type=str, default=None, help="ERA5 NetCDF (default: from --dataset-version)")
+    parser.add_argument("--prism-path", type=str, default=None, help="PRISM directory (default: from --dataset-version)")
     parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
     parser.add_argument(
         "--models",
@@ -372,7 +379,10 @@ def main() -> None:
             "PyTorch is required to run evaluation. Install dependencies with: pip install -r requirements.txt"
         )
 
+    from datasets.dataset_paths import apply_dataset_version_to_args
     from datasets.prism_dataset import ERA5_PRISM_Dataset
+
+    apply_dataset_version_to_args(args)
     from models.baselines import fit_global_linear_baseline, upsample_latest_era5
 
     era5_path = Path(args.era5_path)

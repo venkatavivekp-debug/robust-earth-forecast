@@ -22,16 +22,24 @@ def main() -> int:
         default=None,
         help="Directory containing JSON (default: <repo>/docs/experiments)",
     )
+    parser.add_argument(
+        "--dataset-version",
+        type=str,
+        choices=["small", "medium"],
+        default="small",
+        help="Validate final_comparison.json vs final_comparison_medium.json",
+    )
     args = parser.parse_args()
     root = project_root()
     exp_dir = args.experiments_dir or (root / "docs" / "experiments")
-    final_path = exp_dir / "final_comparison.json"
+    fname = "final_comparison.json" if args.dataset_version == "small" else "final_comparison_medium.json"
+    final_path = exp_dir / fname
     errors: List[str] = []
     warns: List[str] = []
 
     if not final_path.exists():
         errors.append(f"Missing {final_path}")
-        _print_report(errors, warns)
+        _print_report(errors, warns, ok_name=final_path.name)
         return 1
 
     data: Dict[str, Any] = json.loads(final_path.read_text(encoding="utf-8"))
@@ -60,7 +68,7 @@ def main() -> int:
                 errors.append(f"convlstm_rmse_by_history[{i}] has non-finite rmse")
 
     if errors:
-        _print_report(errors, warns)
+        _print_report(errors, warns, ok_name=final_path.name)
         return 1
 
     p_rmse = float(data["improvement_vs_persistence"]["persistence_rmse"])
@@ -94,11 +102,11 @@ def main() -> int:
             if not isinstance(c, (int, float)) or not math.isfinite(float(c)):
                 warns.append("error_analysis.json: correlation_gradient_error non-finite")
 
-    _print_report(errors, warns)
+    _print_report(errors, warns, ok_name=final_path.name)
     return 0 if not errors else 1
 
 
-def _print_report(errors: List[str], warns: List[str]) -> None:
+def _print_report(errors: List[str], warns: List[str], *, ok_name: str = "final_comparison.json") -> None:
     if errors:
         print("ERRORS:")
         for e in errors:
@@ -108,7 +116,7 @@ def _print_report(errors: List[str], warns: List[str]) -> None:
         for w in warns:
             print(f"  - {w}")
     if not errors and not warns:
-        print("validate_results: OK (final_comparison.json checks passed)")
+        print(f"validate_results: OK ({ok_name} checks passed)")
 
 
 if __name__ == "__main__":

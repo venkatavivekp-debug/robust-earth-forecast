@@ -19,8 +19,22 @@ if str(PROJECT_ROOT) not in sys.path:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run core ERA5→PRISM experiments with fixed splits and unified evaluation.")
-    p.add_argument("--era5-path", type=str, default="data_raw/era5_georgia_multi.nc")
-    p.add_argument("--prism-path", type=str, default="data_raw/prism")
+    p.add_argument(
+        "--dataset-version",
+        type=str,
+        choices=["small", "medium"],
+        default="small",
+        help="Paths from datasets/<version>/paths.json when --era5-path/--prism-path omitted; "
+        "also selects results/experiments vs results/experiments_medium unless --experiments-root is set",
+    )
+    p.add_argument("--era5-path", type=str, default=None, help="Override ERA5 NetCDF path")
+    p.add_argument("--prism-path", type=str, default=None, help="Override PRISM directory path")
+    p.add_argument(
+        "--experiments-root",
+        type=str,
+        default=None,
+        help="Root directory for this sweep (default: results/experiments or results/experiments_medium)",
+    )
     p.add_argument("--input-sets", type=str, nargs="+", default=["t2m", "core4"], choices=["t2m", "core4"])
     p.add_argument("--histories", type=int, nargs="+", default=[1, 3, 6])
     p.add_argument("--epochs-cnn", type=int, default=80)
@@ -214,7 +228,16 @@ def write_experiment_rows(
 
 def main() -> None:
     args = parse_args()
-    results_root = PROJECT_ROOT / "results" / "experiments"
+    from datasets.dataset_paths import apply_dataset_version_to_args
+
+    apply_dataset_version_to_args(args)
+
+    if args.experiments_root:
+        results_root = Path(args.experiments_root)
+    else:
+        sub = "experiments_medium" if args.dataset_version == "medium" else "experiments"
+        results_root = PROJECT_ROOT / "results" / sub
+
     summary_out = results_root / "summary.csv"
     if args.overwrite and summary_out.exists():
         summary_out.unlink()
