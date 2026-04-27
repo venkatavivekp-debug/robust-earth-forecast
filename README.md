@@ -2,6 +2,16 @@
 
 Regional ERA5 → PRISM temperature downscaling over Georgia using simple baselines and two temporal/spatial neural models (CNN, ConvLSTM).
 
+## Research Context
+
+The task is **statistical downscaling**: map coarse daily ERA5 fields to fine-grid PRISM daily temperature over the same region and dates. Downscaling is hard because sub-grid variability (topography, land cover, mesoscale circulations) is not fully encoded in coarse reanalysis cells, and ERA5 is a model–observation blend, not a direct substitute for station- or radar-based targets. **Temporal context** matters when synoptic evolution over several days constrains the target; **multi-variable inputs** (winds, surface pressure, etc.) carry advection and mass information beyond 2 m temperature alone. This repository stays deliberately small: tens of aligned days are enough to exercise the pipeline but not to identify rich architectures—behavior reported here is consistent with data-limited supervised learning, not with global forecasting or foundation-model training at reanalysis scale. Large operational systems (e.g. GraphCast-style global forecasting, Prithvi WxC-style pretraining on long multivariate archives) differ mainly in **data volume, spatial domain, and compute**, not in the claim that a ConvLSTM on a short regional slice should match them.
+
+Further reading written for this codebase:
+
+- [Literature notes](docs/research/literature_notes.md) — short summaries and what transfers at prototype scale  
+- [Research gap](docs/research/research_gap.md) — what is already shown and what is missing versus large-scale work  
+- [Next experiment plan](docs/research/next_experiment_plan.md) — three concrete studies (history, data volume, variables)
+
 ## Problem
 
 - **Input**: ERA5 daily fields on a coarse grid.
