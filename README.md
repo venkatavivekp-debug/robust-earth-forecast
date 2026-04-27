@@ -86,6 +86,10 @@ Figures: `docs/images/model_comparison.png`, `sample_prediction.png`, `error_map
 
 Run `python3 scripts/run_core_experiments.py --input-sets t2m core4 --histories 1 3 6 --split-seed 42 --overwrite`; artifacts live under `results/experiments/<input>_h<h>/` (gitignored). Check committed JSON: `python3 scripts/validate_results.py`. Print the same RMSE grid: `python3 scripts/summarize_results.py`. After a new sweep, export an updated `final_comparison.json` and refresh `docs/experiments/results_summary.md` if you want the doc table to match.
 
+## Data scaling experiment
+
+More calendar days use the **same models and configs** via `--dataset-version medium` and paths under `data_raw/medium/` (`datasets/medium/paths.json`). **Small** stays the default demo (~**18** aligned samples). **Medium** metrics are not committed until you download data and run `python3 scripts/run_core_experiments.py --dataset-version medium --overwrite`; see **`docs/experiments/data_scaling.md`**.
+
 ## Limitations
 
 - **Few aligned days** and **short calendar span** in the default example.  
