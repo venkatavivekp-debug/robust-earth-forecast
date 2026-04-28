@@ -57,3 +57,18 @@ Values come from `results/experiments/summary.csv`, `results/experiments_medium/
 ## Conclusion
 
 Medium data makes the experiment more reliable and turns several failures into wins over persistence, but it does **not** prove that simply adding three months lowers the best achievable RMSE. The realistic next step is to keep the architecture fixed, add more calendar coverage, and repeat the same grid across at least one additional split seed.
+
+## Stability Across Splits
+
+Medium was rerun with `split_seed` / `seed` values **42**, **7**, and **123**, writing separate outputs under `results/experiments_medium_seed_<seed>/`. Values below are sample mean ± sample standard deviation across the three split/training seeds.
+
+| Model | Variables | History | RMSE mean ± std |
+| --- | --- | ---: | ---: |
+| ConvLSTM | core4 | 6 | 1.4845 ± 0.1215 |
+| ConvLSTM | core4 | 3 | 1.5289 ± 0.0806 |
+| ConvLSTM | t2m | 6 | 1.6122 ± 0.2689 |
+| CNN | t2m | 3 | 1.6345 ± 0.0451 |
+| CNN | core4 | 3 | 1.8810 ± 0.2539 |
+| ConvLSTM | t2m | 3 | 1.9028 ± 0.1547 |
+
+The exact best row is **partially stable**, not invariant: ConvLSTM `core4_h3` wins seeds 42 and 7, while seed 123 wins with ConvLSTM `t2m_h6`. By mean RMSE, ConvLSTM `core4_h6` is best and ConvLSTM `core4_h3` is a close second. The main conclusion is stable at the model-family level: temporal ConvLSTM configurations are the strongest group, but history length and input set remain split-sensitive. ConvLSTM does **not** consistently beat CNN in every matched setting, and `core4` does **not** consistently beat `t2m` for CNN.

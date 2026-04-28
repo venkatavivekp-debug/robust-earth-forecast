@@ -90,6 +90,10 @@ Run `python3 scripts/run_core_experiments.py --input-sets t2m core4 --histories 
 
 Medium data extends the same Georgia ERA5 -> PRISM setup from the January demo to **2023-01-01 through 2023-03-31** (**88** usable samples at history 3). The best ConvLSTM RMSE is essentially flat in absolute terms (**1.5704** small vs **1.5818** medium), but weak configurations stabilize: every medium ConvLSTM row and every medium CNN row beats its matching persistence baseline. This means more data helps reliability more than it proves a lower best RMSE.
 
+## Result Stability
+
+Three medium split/training seeds show partial stability: ConvLSTM `core4_h3` wins seeds **42** and **7**, while seed **123** favors ConvLSTM `t2m_h6`. By mean RMSE, ConvLSTM `core4_h6` is best (**1.4845 ± 0.1215**) and `core4_h3` is close (**1.5289 ± 0.0806**). The conclusion is stable at the family level, but exact history/input choice is still split-sensitive.
+
 ## Limitations
 
 - **Few aligned days** and **short calendar span** in the default example.  
