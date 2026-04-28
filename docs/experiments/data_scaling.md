@@ -1,42 +1,59 @@
 # Data scaling experiment (small vs medium)
 
-**What stayed the same:** Georgia bbox, ERA5 variable set (`core4` channels), CNN/ConvLSTM code, train/eval metrics, `--split-seed 42`, `--seed 42`, and `scripts/run_core_experiments.py` hyperparameters.
+**What stayed the same:** Georgia bbox, ERA5/PRISM pipeline, CNN/ConvLSTM code, train/eval metrics, `--split-seed 42`, `--seed 42`, and `scripts/run_core_experiments.py` hyperparameters.
 
-**What changed:** only the **calendar span** and on-disk paths (`datasets/small/` vs `datasets/medium/` presets → `data_raw/...` vs `data_raw/medium/...`).
+**What changed:** only the calendar span and dataset paths. **Small** uses the January 2023 demo overlap. **Medium** uses January 1 through March 31, 2023 under `data_raw/medium/`.
 
 ## Sample counts
 
-| Version | Typical aligned samples (this repo) | Notes |
-| --- | ---: | --- |
-| **small** | **18** | January 2023 demo overlap (`docs/experiments/final_comparison.json` regime). |
-| **medium** | *Not run in CI* | Build with extended `--start-date` / `--end-date` downloads into `data_raw/medium/`, then count with `len(ERA5_PRISM_Dataset(...))` after PRISM exists for the same span. |
+| Dataset | History 1 | History 3 | History 6 |
+| --- | ---: | ---: | ---: |
+| small | 20 | 18 | 15 |
+| medium | 90 | 88 | 85 |
 
-## RMSE table — small (archived JSON only)
+## RMSE comparison
 
-Values copied from `docs/experiments/final_comparison.json`. **CNN** is not stored there; the controlled sweep still finds CNN **≥ persistence RMSE** for every `(input, history)` cell—see `results/experiments/*/evaluation/baselines_summary.csv` after a local run.
+Values come from `results/experiments/summary.csv`, `results/experiments_medium/summary.csv`, `docs/experiments/final_comparison.json`, and `docs/experiments/final_comparison_medium.json`. Beat flags use the matching persistence row for each dataset/history split.
 
-| Dataset | Model | Variables | History | RMSE | Beats persistence |
+| Dataset | Model | Variables | History | RMSE | Beats Persistence |
 | --- | --- | --- | ---: | ---: | --- |
-| small | Persistence | — | — | 2.355815142393112 | baseline |
+| small | Persistence | core4 | 3 | 2.355815142393112 | baseline |
+| small | CNN | t2m | 1 | 5.2338986992836 | No |
+| small | CNN | t2m | 3 | 4.504708349704742 | No |
+| small | CNN | t2m | 6 | 5.41701078414917 | No |
+| small | CNN | core4 | 1 | 4.496296465396881 | No |
+| small | CNN | core4 | 3 | 3.4474770426750183 | No |
+| small | CNN | core4 | 6 | 3.070897897084554 | Yes |
+| small | ConvLSTM | t2m | 1 | 4.956881523132324 | No |
+| small | ConvLSTM | t2m | 3 | 2.0036779940128326 | Yes |
+| small | ConvLSTM | t2m | 6 | 2.991683403650919 | Yes |
 | small | ConvLSTM | core4 | 1 | 4.246121346950531 | No |
 | small | ConvLSTM | core4 | 3 | 1.5704300999641418 | Yes |
 | small | ConvLSTM | core4 | 6 | 2.3035560051600137 | Yes |
-| small | ConvLSTM | t2m | 1 | 4.956881523132324 | No |
-| small | ConvLSTM | t2m | 3 | 2.0036779940128326 | Yes |
-| small | ConvLSTM | t2m | 6 | 2.991683403650919 | No |
+| medium | Persistence | core4 | 3 | 2.966560184955597 | baseline |
+| medium | CNN | t2m | 1 | 2.3131760358810425 | Yes |
+| medium | CNN | t2m | 3 | 1.6414796262979507 | Yes |
+| medium | CNN | t2m | 6 | 1.7203279733657837 | Yes |
+| medium | CNN | core4 | 1 | 2.313338950276375 | Yes |
+| medium | CNN | core4 | 3 | 2.1001143231987953 | Yes |
+| medium | CNN | core4 | 6 | 2.3830468356609344 | Yes |
+| medium | ConvLSTM | t2m | 1 | 2.561451241374016 | Yes |
+| medium | ConvLSTM | t2m | 3 | 2.0794655084609985 | Yes |
+| medium | ConvLSTM | t2m | 6 | 1.6947292536497116 | Yes |
+| medium | ConvLSTM | core4 | 1 | 2.451022446155548 | Yes |
+| medium | ConvLSTM | core4 | 3 | 1.581842489540577 | Yes |
+| medium | ConvLSTM | core4 | 6 | 1.5877669304609299 | Yes |
 
-## RMSE table — medium
+## Analysis
 
-**Not populated yet.** After you run:
+1. **Does RMSE improve with more data?** Not for the single best ConvLSTM cell: small `core4_h3` is **1.5704**, while medium `core4_h3` is **1.5818**. That is essentially flat and slightly worse in absolute RMSE. The broader grid does improve: weak small-data cells, especially history 1 and CNN rows, become much better on medium.
 
-`python3 scripts/run_core_experiments.py --dataset-version medium --overwrite`
+2. **Does ConvLSTM benefit more than CNN?** Not universally. ConvLSTM remains best overall on medium (`core4_h3`, **1.5818**) and is clearly stronger for `core4_h3`/`core4_h6`, but CNN benefits a lot from the larger dataset and beats ConvLSTM on `t2m_h1`, `t2m_h3`, and `core4_h1`.
 
-copy the key RMSE values into `docs/experiments/final_comparison_medium.json` (same schema as `final_comparison.json`) and extend this table. Use `python3 scripts/summarize_results.py --dataset-version medium` to print the grid from that JSON.
+3. **Does temporal sensitivity stabilize?** Yes, partly. On small data, ConvLSTM history 1 fails badly and history 6 is mixed. On medium, every ConvLSTM history/input row beats its matching persistence baseline. History still matters: `core4_h3` and `core4_h6` are nearly tied, while `core4_h1` is worse.
 
-## Short analysis (small-only facts)
+4. **Are results still configuration-sensitive?** Yes. The best medium CNN uses `t2m_h3`, while the best medium ConvLSTM uses `core4_h3`. Extra variables help ConvLSTM but hurt CNN at histories 3 and 6. The ranking is more stable than small, but it is not architecture- or input-agnostic.
 
-- **RMSE vs data:** we do **not** yet have a committed medium run, so we **cannot** claim RMSE drops with more days.  
-- **Stability:** on **small *N***, ConvLSTM **beats and loses** to persistence depending on history/input—expect variance until medium results exist.  
-- **ConvLSTM vs CNN:** CNN never beats persistence in the archived small sweep; ConvLSTM sometimes does—**no medium evidence** yet for whether that gap widens.
+## Conclusion
 
-**Honest conclusion until medium is logged:** extending the calendar is the right experiment, but **you must re-run the identical script** on downloaded medium data and archive metrics before claiming any scaling benefit.
+Medium data makes the experiment more reliable and turns several failures into wins over persistence, but it does **not** prove that simply adding three months lowers the best achievable RMSE. The realistic next step is to keep the architecture fixed, add more calendar coverage, and repeat the same grid across at least one additional split seed.

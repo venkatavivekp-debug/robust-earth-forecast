@@ -1,0 +1,80 @@
+{
+  "dataset_version": "medium",
+  "best_config": {
+    "model": "convlstm",
+    "input_set": "core4",
+    "history": 3
+  },
+  "best_rmse": 1.581842489540577,
+  "improvement_vs_persistence": {
+    "persistence_rmse": 2.966560184955597,
+    "delta_vs_persistence": -1.38471769541502,
+    "percent_improvement": 46.677552757479155
+  },
+  "best_overall": {
+    "model": "convlstm",
+    "input_set": "core4",
+    "history": 3,
+    "rmse": 1.581842489540577,
+    "persistence_rmse": 2.966560184955597,
+    "delta_vs_persistence": -1.38471769541502,
+    "percent_improvement": 46.677552757479155
+  },
+  "best_t2m": {
+    "model": "convlstm",
+    "input_set": "t2m",
+    "history": 6,
+    "rmse": 1.6947292536497116,
+    "persistence_rmse": 2.966560184955597,
+    "delta_vs_persistence": -1.2718309313058853,
+    "percent_improvement": 42.87224435073856
+  },
+  "best_core4": {
+    "model": "convlstm",
+    "input_set": "core4",
+    "history": 3,
+    "rmse": 1.581842489540577,
+    "persistence_rmse": 2.966560184955597,
+    "delta_vs_persistence": -1.38471769541502,
+    "percent_improvement": 46.677552757479155
+  },
+  "core4_outperforms_t2m": true,
+  "convlstm_rmse_by_history": [
+    {
+      "input_set": "t2m",
+      "history": 1,
+      "rmse": 2.561451241374016
+    },
+    {
+      "input_set": "t2m",
+      "history": 3,
+      "rmse": 2.0794655084609985
+    },
+    {
+      "input_set": "t2m",
+      "history": 6,
+      "rmse": 1.6947292536497116
+    },
+    {
+      "input_set": "core4",
+      "history": 1,
+      "rmse": 2.451022446155548
+    },
+    {
+      "input_set": "core4",
+      "history": 3,
+      "rmse": 1.581842489540577
+    },
+    {
+      "input_set": "core4",
+      "history": 6,
+      "rmse": 1.5877669304609299
+    }
+  ],
+  "clear_conclusion": "core4 best ConvLSTM RMSE=1.5818 vs best t2m=1.6947. Canonical persistence RMSE (core4, history=3 eval)=2.966560. Best overall ConvLSTM: core4 history=3 RMSE=1.581842.",
+  "usable_samples": {
+    "history_1": 90,
+    "history_3": 88,
+    "history_6": 85
+  }
+}
