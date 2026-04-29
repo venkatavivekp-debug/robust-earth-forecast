@@ -68,9 +68,14 @@ Primary grid: **`scripts/run_core_experiments.py`** with **`t2m` and `core4`**, 
 
 ## Results
 
-Full grid (Persistence + ConvLSTM RMSE, beat flags): **[`docs/experiments/results_summary.md`](docs/experiments/results_summary.md)** — values are copied from **`docs/experiments/final_comparison.json`**.
+Archived single-split summaries:
 
-Key numbers from that JSON: persistence RMSE **2.355815142393112**; best ConvLSTM cell **`core4`, history 3**, RMSE **1.5704300999641418**; worst ConvLSTM rows **history 1** (e.g. **4.246121346950531** for `core4`, **4.956881523132324** for `t2m`). **CNN** is not stored in that JSON; the local `results/experiments/summary.csv` shows CNN is worse than persistence for most small-data cells, with `core4`, history 6 as the exception.
+| Dataset | Best config | Best RMSE | Persistence RMSE | Delta vs persistence |
+| --- | --- | ---: | ---: | ---: |
+| small | ConvLSTM `core4_h3` | 1.5704300999641418 | 2.355815142393112 | -0.7853850424289703 |
+| medium | ConvLSTM `core4_h3` | 1.581842489540577 | 2.966560184955597 | -1.38471769541502 |
+
+The medium best RMSE is essentially flat relative to the small run, but it is farther below its matching persistence baseline. Full small-grid ConvLSTM values are in **[`docs/experiments/results_summary.md`](docs/experiments/results_summary.md)** and **`docs/experiments/final_comparison.json`**; medium values are in **`docs/experiments/final_comparison_medium.json`**.
 
 Figures: `docs/images/model_comparison.png`, `sample_prediction.png`, `error_map.png`.
 
@@ -88,11 +93,13 @@ Run `python3 scripts/run_core_experiments.py --input-sets t2m core4 --histories 
 
 ## Data Scaling Experiment
 
-Medium data extends the same Georgia ERA5 -> PRISM setup from the January demo to **2023-01-01 through 2023-03-31** (**88** usable samples at history 3). The best ConvLSTM RMSE is essentially flat in absolute terms (**1.5704** small vs **1.5818** medium), but weak configurations stabilize: every medium ConvLSTM row and every medium CNN row beats its matching persistence baseline. This means more data helps reliability more than it proves a lower best RMSE.
+Medium data extends the same Georgia ERA5 -> PRISM setup from the January demo to **2023-01-01 through 2023-03-31** (**88** usable samples at history 3). The best single-split ConvLSTM RMSE is essentially flat (**1.5704** small vs **1.5818** medium), while weak configurations stabilize and beat their matching persistence baselines more often. Treat this as a stability gain, not a major performance gain.
 
 ## Result Stability
 
-Three medium split/training seeds show partial stability: ConvLSTM `core4_h3` wins seeds **42** and **7**, while seed **123** favors ConvLSTM `t2m_h6`. By mean RMSE, ConvLSTM `core4_h6` is best (**1.4845 ± 0.1215**) and `core4_h3` is close (**1.5289 ± 0.0806**). The conclusion is stable at the family level, but exact history/input choice is still split-sensitive.
+Three medium split/training seeds show partial stability: all seed-level winners are ConvLSTM, and the best mean row is ConvLSTM `core4_h6` (**1.4845 ± 0.1215**). `core4_h3` is close (**1.5289 ± 0.0806**) and wins seeds **42** and **7**, while seed **123** favors `t2m_h6`. Configs are split-sensitive, so conclusions are trend-based rather than tied to one single best run.
+
+All results are reported with variability across splits rather than a single run.
 
 ## Limitations
 

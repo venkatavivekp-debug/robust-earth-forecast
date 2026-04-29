@@ -48,15 +48,15 @@ Values come from `results/experiments/summary.csv`, `results/experiments_medium/
 
 1. **Does RMSE improve with more data?** Not for the single best ConvLSTM cell: small `core4_h3` is **1.5704**, while medium `core4_h3` is **1.5818**. That is essentially flat and slightly worse in absolute RMSE. The broader grid does improve: weak small-data cells, especially history 1 and CNN rows, become much better on medium.
 
-2. **Does ConvLSTM benefit more than CNN?** Not universally. ConvLSTM remains best overall on medium (`core4_h3`, **1.5818**) and is clearly stronger for `core4_h3`/`core4_h6`, but CNN benefits a lot from the larger dataset and beats ConvLSTM on `t2m_h1`, `t2m_h3`, and `core4_h1`.
+2. **Does ConvLSTM benefit more than CNN?** Not universally. In the seed-42 medium run, ConvLSTM is best overall (`core4_h3`, **1.5818**) and is clearly stronger for `core4_h3`/`core4_h6`, but CNN benefits a lot from the larger dataset and beats ConvLSTM on `t2m_h1`, `t2m_h3`, and `core4_h1`.
 
 3. **Does temporal sensitivity stabilize?** Yes, partly. On small data, ConvLSTM history 1 fails badly and history 6 is mixed. On medium, every ConvLSTM history/input row beats its matching persistence baseline. History still matters: `core4_h3` and `core4_h6` are nearly tied, while `core4_h1` is worse.
 
-4. **Are results still configuration-sensitive?** Yes. The best medium CNN uses `t2m_h3`, while the best medium ConvLSTM uses `core4_h3`. Extra variables help ConvLSTM but hurt CNN at histories 3 and 6. The ranking is more stable than small, but it is not architecture- or input-agnostic.
+4. **Are results still configuration-sensitive?** Yes. In the seed-42 medium run, the best CNN uses `t2m_h3`, while the best ConvLSTM uses `core4_h3`. Extra variables help ConvLSTM but hurt CNN at histories 3 and 6. The ranking is more stable than small, but it is not architecture- or input-agnostic.
 
 ## Conclusion
 
-Medium data makes the experiment more reliable and turns several failures into wins over persistence, but it does **not** prove that simply adding three months lowers the best achievable RMSE. The realistic next step is to keep the architecture fixed, add more calendar coverage, and repeat the same grid across at least one additional split seed.
+Medium data makes the experiment more reliable and turns several failures into wins over persistence, but it does **not** prove that simply adding three months lowers the best achievable RMSE. The realistic next step is to keep the architecture fixed, add more calendar coverage, and continue reporting split variability.
 
 ## Stability Across Splits
 
