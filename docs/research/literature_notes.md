@@ -13,9 +13,9 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** It is a concrete example of how modern practice couples huge data volume, many variables, and long temporal context before specialization.
 
-**What can be adopted.** Treat multivariate inputs and temporal windows as first-class design choices; keep evaluation against simple baselines; document data limits explicitly.
+**Useful here.** Treat multivariate inputs and temporal windows as first-class design choices; keep evaluation against simple baselines; document data limits explicitly.
 
-**What cannot be adopted at this scale.** Model size, compute budget, and global/long-record pretraining are out of scope for this repo’s current data volume.
+**Out of scope.** Model size, compute budget, and global/long-record pretraining are outside this repo’s current data volume.
 
 ---
 
@@ -27,9 +27,9 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** The repo’s ConvLSTM baseline is the same family of idea: temporal recurrence with spatially local mixing.
 
-**What can be adopted.** History length as a controlled knob; monitoring for instability when sequences are short or data are scarce.
+**Useful here.** History length as a controlled knob; monitoring for instability when sequences are short or data are scarce.
 
-**What cannot be adopted wholesale.** Radar nowcasting setups use dense high-resolution sequences; this project has far fewer days and a reanalysis-to-observation gap.
+**Out of scope.** Radar nowcasting setups use dense high-resolution sequences; this project has far fewer days and a reanalysis-to-observation gap.
 
 ---
 
@@ -41,9 +41,9 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** It shows what becomes possible when the model can see full spatial context and long climate statistics; persistence is not the main competitor in that regime.
 
-**What can be adopted.** Emphasis on honest baselines, held-out time, and reporting against operational or numerical references where applicable.
+**Useful here.** Emphasis on honest baselines, held-out time, and reporting against operational or numerical references where applicable.
 
-**What cannot be adopted.** Global mesh, parameter count, and training data volume are not transferable to a Georgia-only PRISM slice without a different project scope.
+**Out of scope.** Global mesh, parameter count, and training data volume are not transferable to a Georgia-only PRISM slice without a different project scope.
 
 ---
 
@@ -55,9 +55,9 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** It is another reference for “large model + massive reanalysis” rather than “small regional supervised downscaling.”
 
-**What can be adopted.** Thinking in terms of operator/view that matches grid structure; careful normalization and multi-channel inputs at the *conceptual* level.
+**Useful here.** Thinking in terms of operator/view that matches grid structure; careful normalization and multi-channel inputs at the *conceptual* level.
 
-**What cannot be adopted.** Training infrastructure and global 6-hourly archives at full resolution are not available in this prototype.
+**Out of scope.** Training infrastructure and global 6-hourly archives at full resolution are not available in this prototype.
 
 ---
 
@@ -69,9 +69,9 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** It aligns with the repo’s actual problem class: learn a mapping from coarse predictors to a finer grid with documented procedures.
 
-**What can be adopted.** Clear experiment logging, held-out evaluation, and reporting relative to simpler mappings.
+**Useful here.** Clear experiment logging, held-out evaluation, and reporting relative to simpler mappings.
 
-**What cannot be adopted without more data.** Their setups still assume substantially more data and often broader domains than a short PRISM window over one state.
+**Out of scope.** Their setups still assume substantially more data and often broader domains than a short PRISM window over one state.
 
 ---
 
@@ -83,9 +83,9 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** Coarse ERA5 2 m temperature is a plausible predictor for PRISM, but the two products differ in physics, grid, and observation influence.
 
-**What can be adopted.** Treating misalignment and systematic bias as expected, and reserving strong claims until sample size grows.
+**Useful here.** Treating misalignment and systematic bias as expected, and reserving strong claims until sample size grows.
 
-**What cannot be adopted.** Reanalysis cannot be “fixed” by a small neural net alone; any learned correction is data-limited.
+**Out of scope.** Reanalysis cannot be “fixed” by a small neural net alone; any learned correction is data-limited.
 
 ---
 
@@ -97,9 +97,9 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** Supervised ERA5 → PRISM is a form of learned mapping across scales; the same structural cautions apply when *N* is small.
 
-**What can be adopted.** Careful interpretation of improvements over persistence; checking spatial and marginal properties beyond a single RMSE.
+**Useful here.** Careful interpretation of improvements over persistence; checking spatial and marginal properties beyond a single RMSE.
 
-**What cannot be adopted as a turnkey fix.** Full multivariate calibration theory needs more data and often explicit probabilistic goals than this baseline repo targets.
+**Out of scope.** Full multivariate calibration theory needs more data and often explicit probabilistic goals than this baseline repo targets.
 
 ---
 
@@ -111,9 +111,9 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** It is the classical counterpart to learned deep mappings: similarity in predictor space replaces millions of parameters when long archives exist.
 
-**What can be adopted.** Treating persistence and linear maps as mandatory sanity checks echoes the analog idea of “do not ignore cheap structure.”
+**Useful here.** Treating persistence and linear maps as mandatory sanity checks echoes the analog idea of “do not ignore cheap structure.”
 
-**What cannot be adopted without data.** A meaningful analog pool needs a long, consistent archive; a month-scale PRISM slice is the opposite regime.
+**Out of scope.** A meaningful analog pool needs a long, consistent archive; a month-scale PRISM slice is the opposite regime.
 
 ---
 

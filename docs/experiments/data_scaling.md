@@ -1,8 +1,8 @@
 # Data scaling experiment (small vs medium)
 
-**What stayed the same:** Georgia bbox, ERA5/PRISM pipeline, CNN/ConvLSTM code, train/eval metrics, `--split-seed 42`, `--seed 42`, and `scripts/run_core_experiments.py` hyperparameters.
+Same Georgia bbox, ERA5/PRISM pipeline, CNN/ConvLSTM code, metrics, and `scripts/run_core_experiments.py` defaults. The only change is the date range and dataset paths.
 
-**What changed:** only the calendar span and dataset paths. **Small** uses the January 2023 demo overlap. **Medium** uses January 1 through March 31, 2023 under `data_raw/medium/`.
+**Small** is the January 2023 demo overlap. **Medium** is January 1 through March 31, 2023 under `data_raw/medium/`.
 
 ## Sample counts
 
@@ -44,19 +44,16 @@ Values come from `results/experiments/summary.csv`, `results/experiments_medium/
 | medium | ConvLSTM | core4 | 3 | 1.581842489540577 | Yes |
 | medium | ConvLSTM | core4 | 6 | 1.5877669304609299 | Yes |
 
-## Analysis
+## Readout
 
-1. **Does RMSE improve with more data?** Not for the single best ConvLSTM cell: small `core4_h3` is **1.5704**, while medium `core4_h3` is **1.5818**. That is essentially flat and slightly worse in absolute RMSE. The broader grid does improve: weak small-data cells, especially history 1 and CNN rows, become much better on medium.
+- Best single-split ConvLSTM RMSE does **not** improve: small `core4_h3` is **1.5704**, medium `core4_h3` is **1.5818**.
+- Medium improves the weak parts of the grid. History-1 ConvLSTM and CNN rows are much less brittle than in the small run.
+- In the seed-42 medium run, ConvLSTM is best overall at `core4_h3`; CNN still wins some matched settings (`t2m_h1`, `t2m_h3`, `core4_h1`).
+- The ranking is more stable than the small run, but it still depends on model, input set, history, and split.
 
-2. **Does ConvLSTM benefit more than CNN?** Not universally. In the seed-42 medium run, ConvLSTM is best overall (`core4_h3`, **1.5818**) and is clearly stronger for `core4_h3`/`core4_h6`, but CNN benefits a lot from the larger dataset and beats ConvLSTM on `t2m_h1`, `t2m_h3`, and `core4_h1`.
+## Bottom line
 
-3. **Does temporal sensitivity stabilize?** Yes, partly. On small data, ConvLSTM history 1 fails badly and history 6 is mixed. On medium, every ConvLSTM history/input row beats its matching persistence baseline. History still matters: `core4_h3` and `core4_h6` are nearly tied, while `core4_h1` is worse.
-
-4. **Are results still configuration-sensitive?** Yes. In the seed-42 medium run, the best CNN uses `t2m_h3`, while the best ConvLSTM uses `core4_h3`. Extra variables help ConvLSTM but hurt CNN at histories 3 and 6. The ranking is more stable than small, but it is not architecture- or input-agnostic.
-
-## Conclusion
-
-Medium data makes the experiment more reliable and turns several failures into wins over persistence, but it does **not** prove that simply adding three months lowers the best achievable RMSE. The realistic next step is to keep the architecture fixed, add more calendar coverage, and continue reporting split variability.
+Medium data makes the experiment more reliable, but it does **not** show that three months lowers the best achievable RMSE. Keep the architecture fixed, add calendar coverage, and keep reporting split variability.
 
 ## Stability Across Splits
 
@@ -71,4 +68,4 @@ Medium was rerun with `split_seed` / `seed` values **42**, **7**, and **123**, w
 | CNN | core4 | 3 | 1.8810 ± 0.2539 |
 | ConvLSTM | t2m | 3 | 1.9028 ± 0.1547 |
 
-The exact best row is **partially stable**, not invariant: ConvLSTM `core4_h3` wins seeds 42 and 7, while seed 123 wins with ConvLSTM `t2m_h6`. By mean RMSE, ConvLSTM `core4_h6` is best and ConvLSTM `core4_h3` is a close second. The main conclusion is stable at the model-family level: temporal ConvLSTM configurations are the strongest group, but history length and input set remain split-sensitive. ConvLSTM does **not** consistently beat CNN in every matched setting, and `core4` does **not** consistently beat `t2m` for CNN.
+The exact winner is not fixed: ConvLSTM `core4_h3` wins seeds 42 and 7; seed 123 wins with ConvLSTM `t2m_h6`. By mean RMSE, ConvLSTM `core4_h6` is best and `core4_h3` is close. The stable claim is narrower: temporal ConvLSTM configurations are the strongest group, but history length and input set remain split-sensitive. ConvLSTM does **not** beat CNN in every matched setting, and `core4` does **not** consistently beat `t2m` for CNN.

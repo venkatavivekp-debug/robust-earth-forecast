@@ -12,8 +12,8 @@ All numeric RMSE values below are **copied from** `docs/experiments/final_compar
 | ConvLSTM | t2m | 3 | 2.0036779940128326 | Yes |
 | ConvLSTM | t2m | 6 | 2.991683403650919 | No |
 
-**CNN (same `run_core_experiments.py` grid, not in this JSON):** README and run logs for that sweep report CNN **worse than persistence** for every `(t2m \| core4) × (1, 3, 6)` cell; recover exact CNN RMSE from `results/experiments/<input>_h<h>/evaluation/` if needed.
+**CNN (same `run_core_experiments.py` grid, not in this JSON):** exact CNN rows live in `results/experiments/summary.csv` when the sweep has been run locally. In the current local summary, CNN is worse than persistence for most small-data cells; `core4_h6` is the exception.
 
-**Interpretation**
+**Readout**
 
-ConvLSTM **helps most** at **`core4` + history 3**, where RMSE is lowest in this archive. It **fails badly at history 1** for both input sets (RMSE well above persistence). **`t2m` + history 6** also lands above persistence, while **`core4` + history 6** still beats persistence but is **worse than history 3**—so longer context is not automatically better. The pattern is **unstable across history**: large swing from h1 to h3, then partial loss at h6 for `core4` and full loss for `t2m` at h6, consistent with **very small validation *N*** and optimization noise rather than a monotone “more days always help” law.
+ConvLSTM is best at **`core4` + history 3** in this archive. History 1 fails for both input sets, and history 6 does not improve on history 3. The history curve is unstable enough that this should be read as a small-split result, not a monotone rule about temporal context.
