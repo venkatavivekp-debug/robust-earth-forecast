@@ -2,7 +2,7 @@
 
 ## Overview
 
-Daily **ERA5** fields over **Georgia** (default bounding box in `data_pipeline/download_era5_georgia.py`: roughly 30–35°N, 80–85°W) are aligned to **PRISM** daily mean temperature (`tmean`) on a finer grid. The code learns a **supervised map** from a short **history** of coarse inputs to the target day’s PRISM field—**spatiotemporal** in the sense that ConvLSTM (and the CNN, via stacked history channels) consume multiple consecutive days, not a single snapshot.
+Daily **ERA5** fields over **Georgia** (default bbox in `data_pipeline/download_era5_georgia.py`: roughly 30–35°N, 80–85°W) are aligned to finer-grid **PRISM** daily mean temperature (`tmean`). The code trains small CNN/ConvLSTM baselines to map a short ERA5 history to the target-day PRISM field.
 
 ## Data and Setup
 
@@ -81,11 +81,11 @@ Figures: `docs/images/model_comparison.png`, `sample_prediction.png`, `error_map
 
 ## Observations
 
-- **Failure cases**: ConvLSTM at **history 1** is far **above** persistence for both `t2m` and `core4`; **`t2m` + history 6** is **above** the canonical history-3 persistence in `final_comparison.json` (**2.992** vs **2.356**). **CNN** is mostly weak on the small sweep, though the local summary has one beat at `core4` + history 6. These are as important as the best cell.
-- **Why persistence is hard to beat**: the baseline upsamples the **latest** coarse 2 m temperature; for daily fields it already tracks large-scale warmth anomalies, so the model must learn **residual** fine-grid and product differences with **very few** target days.  
-- **History 6 vs 3**: RMSE **worsens** from history 3 → 6 for ConvLSTM on **both** input sets, even though **`core4`+6** still **beats** persistence marginally—**longer context is not reliably better** here.  
-- **Noise**: **18** aligned samples / **four** validation points → treat ordering between close RMSEs cautiously.  
-- **Space**: gradient–error **r ≈ 0.08** (mean maps; **≈ 0.04** pooled) in `docs/experiments/error_analysis.json` — weak link, so **sub-grid detail** is not “solved” by this baseline.
+- In the small run, ConvLSTM with history 1 is worse than persistence for both `t2m` and `core4`; the best small row is still `core4_h3`.
+- Persistence is a hard baseline because it upsamples the latest coarse 2 m temperature, which already tracks much of the daily temperature field.
+- Longer history is not automatically better: small-run ConvLSTM degrades from history 3 to 6 on both input sets.
+- Treat close rankings carefully. The small split has **18** aligned samples and four validation points.
+- Spatial error is not explained by gradients alone: gradient-error **r ≈ 0.08** for mean maps (**≈ 0.04** pooled) in `docs/experiments/error_analysis.json`.
 
 ## Reproducibility
 
