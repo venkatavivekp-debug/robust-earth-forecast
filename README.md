@@ -1,122 +1,87 @@
 # Robust Earth Forecast
 
-## Overview
+ERA5 -> PRISM daily temperature downscaling over Georgia. The repo trains small CNN and ConvLSTM baselines that map a short ERA5 history to the target-day PRISM `tmean` field, then checks them against persistence and simple interpolation baselines.
 
-Daily **ERA5** fields over **Georgia** (default bbox in `data_pipeline/download_era5_georgia.py`: roughly 30–35°N, 80–85°W) are aligned to finer-grid **PRISM** daily mean temperature (`tmean`). The code trains small CNN/ConvLSTM baselines to map a short ERA5 history to the target-day PRISM field.
+This is a small regional experiment, not a global weather model. The useful part is the controlled ERA5/PRISM pipeline, the baseline comparison, and the result stability check.
 
-## Data and Setup
-
-**ERA5 (predictors)**  
-The downloader builds `data_raw/era5_georgia_multi.nc` for a chosen calendar month. Surface variables include **2 m temperature (`t2m`)**, **10 m u/v wind (`u10`, `v10`)**, **surface pressure (`sp`)**, **total precipitation (`tp`)**, and **2 m relative humidity (`rh2m`)** derived from dewpoint; pressure-level **temperature, geopotential height, and relative humidity** at **850 hPa and 500 hPa** are merged for the extended channel list in `datasets/prism_dataset.py`.
-
-**PRISM (target)**  
-**Daily mean temperature** rasters (`tmean`), same dates as ERA5 after alignment. Files live under `data_raw/prism/` (see `data_pipeline/download_prism.py`).
-
-**Temporal window**  
-Examples use **January 2023** (`--year 2023 --month 1` for ERA5; `--start-date 20230101 --days 30` for PRISM). The committed summaries used **18** aligned daily pairs; with `history_length=3`, each sample uses **three consecutive ERA5 days** ending on the PRISM date.
-
-**Input format**  
-Tensor `[T, C, H, W]` with `T = history_length` (e.g. 1, 3, 6). **`t2m`**: one channel. **`core4`**: `t2m`, `u10`, `v10`, `sp`. **`extended`**: more channels if present in the NetCDF.
-
-**Environment**
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-**Download**
-
-```bash
-python3 data_pipeline/download_era5_georgia.py --year 2023 --month 1 --overwrite
-python3 data_pipeline/download_prism.py --start-date 20230101 --days 30 --variable tmean
-```
-
-**Train / evaluate / core grid**
-
-```bash
-python3 training/train_downscaler.py \
-  --model convlstm --input-set core4 --history-length 3 \
-  --epochs 80 --learning-rate 3e-4 --weight-decay 1e-6 \
-  --l1-weight 0.1 --grad-clip 1.0 --split-seed 42 --seed 42
-
-python3 evaluation/evaluate_model.py \
-  --models persistence era5_upsampled linear cnn convlstm \
-  --input-set core4 --history-length 3 --num-samples 8 --split-seed 42
-
-python3 scripts/run_core_experiments.py \
-  --input-sets t2m core4 --histories 1 3 6 --split-seed 42 --overwrite
-```
-
-Artifacts go to `results/` and `checkpoints/` (gitignored). Training writes `.csv` / `.json` logs; evaluation writes `baselines_summary.csv` and per-model `metrics.json`.
-
-## Models
-
-- **CNN (`CNNDownscaler`)**: stacks history in the channel dimension and applies a spatial CNN to the PRISM grid size.  
-- **ConvLSTM (`ConvLSTMDownscaler`)**: ConvLSTM over time, then decodes to PRISM resolution.
-
-**Baselines** in evaluation: **persistence**, **era5_upsampled**, **linear** (`evaluation/evaluate_model.py`).
-
-## Experiments
-
-Primary grid: **`scripts/run_core_experiments.py`** with **`t2m` and `core4`**, histories **`1, 3, 6`**, fixed **`--split-seed 42`** / **`--seed 42`**, script defaults for epochs, LR, early stopping, and batch size. Each cell trains CNN + ConvLSTM, then evaluates against persistence and other baselines; checkpoints and CSVs land under `results/experiments/<input>_h<h>/`.
-
-**Training** (`training/train_downscaler.py`): **80/20** train/val split on indices, **normalization** from train indices only, checkpoint stores **`train_indices` / `val_indices`** for matched eval.
-
-`training/run_temporal_analysis.py` and `training/run_ablation.py` are **out of sync** with the current `train_downscaler.py` CLI; use the commands above for reproducible runs.
-
-## Results
-
-Archived single-split summaries:
+## Result Snapshot
 
 | Dataset | Best config | Best RMSE | Persistence RMSE | Delta vs persistence |
 | --- | --- | ---: | ---: | ---: |
 | small | ConvLSTM `core4_h3` | 1.5704300999641418 | 2.355815142393112 | -0.7853850424289703 |
 | medium | ConvLSTM `core4_h3` | 1.581842489540577 | 2.966560184955597 | -1.38471769541502 |
 
-The medium best RMSE is essentially flat relative to the small run, but it is farther below its matching persistence baseline. Full small-grid ConvLSTM values are in **[`docs/experiments/results_summary.md`](docs/experiments/results_summary.md)** and **`docs/experiments/final_comparison.json`**; medium values are in **`docs/experiments/final_comparison_medium.json`**.
+The medium run uses more days, but the best single-split RMSE is basically flat. Its main benefit is stability: weak configurations fail less often, and multi-seed results make the split sensitivity visible.
 
-Figures: `docs/images/model_comparison.png`, `sample_prediction.png`, `error_map.png`.
+![Model comparison across baselines and learned models](docs/images/model_comparison.png)
 
-## Observations
+![Sample ConvLSTM prediction compared with PRISM target](docs/images/sample_prediction.png)
 
-- In the small run, ConvLSTM with history 1 is worse than persistence for both `t2m` and `core4`; the best small row is still `core4_h3`.
-- Persistence is a hard baseline because it upsamples the latest coarse 2 m temperature, which already tracks much of the daily temperature field.
-- Longer history is not automatically better: small-run ConvLSTM degrades from history 3 to 6 on both input sets.
-- Treat close rankings carefully. The small split has **18** aligned samples and four validation points.
-- Spatial error is not explained by gradients alone: gradient-error **r ≈ 0.08** for mean maps (**≈ 0.04** pooled) in `docs/experiments/error_analysis.json`.
+![Spatial error map for the best small ConvLSTM run](docs/images/error_map.png)
 
-## Reproducibility
+Figures above are committed outputs from the `core4_h3` evaluation run. Full tables are in [`docs/experiments/results_summary.md`](docs/experiments/results_summary.md), [`docs/experiments/data_scaling.md`](docs/experiments/data_scaling.md), and the JSON summaries under `docs/experiments/`.
 
-Run `python3 scripts/run_core_experiments.py --input-sets t2m core4 --histories 1 3 6 --split-seed 42 --overwrite`; artifacts live under `results/experiments/<input>_h<h>/` (gitignored). Check committed JSON: `python3 scripts/validate_results.py`. Print the same RMSE grid: `python3 scripts/summarize_results.py`. After a new sweep, export an updated `final_comparison.json` and refresh `docs/experiments/results_summary.md` if you want the doc table to match.
+## Short Readout
 
-## Data Scaling Experiment
+- Persistence is a hard baseline: latest ERA5 `t2m`, upsampled, already carries much of the daily temperature field.
+- ConvLSTM is the strongest model family in the archived runs, but the exact winner still depends on split, input set, and history length.
+- Moderate temporal context works better than history 1; longer history is not automatically better.
+- More data improved stability more than peak RMSE.
+- Spatial error has structure, but PRISM gradient alone explains little of it (`r ~= 0.08` on mean maps, `~0.04` pooled).
 
-Medium data extends the same Georgia ERA5 -> PRISM setup from the January demo to **2023-01-01 through 2023-03-31** (**88** usable samples at history 3). The best single-split ConvLSTM RMSE is essentially flat (**1.5704** small vs **1.5818** medium), while weak configurations stabilize and beat their matching persistence baselines more often. Treat this as a stability gain, not a major performance gain.
+All results are reported with variability across splits rather than as a single clean run.
 
-## Result Stability
+## Data and Models
 
-Three medium split/training seeds show partial stability: all seed-level winners are ConvLSTM, and the best mean row is ConvLSTM `core4_h6` (**1.4845 ± 0.1215**). `core4_h3` is close (**1.5289 ± 0.0806**) and wins seeds **42** and **7**, while seed **123** favors `t2m_h6`. Configs are split-sensitive, so conclusions are trend-based rather than tied to one single best run.
+- **Predictors:** ERA5 over Georgia, mainly `t2m` and `core4` (`t2m`, `u10`, `v10`, `sp`).
+- **Target:** PRISM daily mean temperature (`tmean`).
+- **Histories:** 1, 3, and 6 days.
+- **Models:** CNN stacks history as channels; ConvLSTM keeps the time axis explicit.
+- **Baselines:** persistence, upsampled ERA5, and a linear baseline.
 
-All results are reported with variability across splits rather than a single run.
+Default small data is January 2023. Medium data is 2023-01-01 through 2023-03-31.
+
+## Reproduce
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+python3 data_pipeline/download_era5_georgia.py --year 2023 --month 1 --overwrite
+python3 data_pipeline/download_prism.py --start-date 20230101 --days 30 --variable tmean
+
+python3 scripts/run_core_experiments.py \
+  --input-sets t2m core4 \
+  --histories 1 3 6 \
+  --split-seed 42 \
+  --seed 42 \
+  --overwrite
+
+python3 scripts/validate_results.py --dataset-version small
+python3 scripts/summarize_results.py --dataset-version small
+```
+
+Medium validation:
+
+```bash
+python3 scripts/validate_results.py --dataset-version medium
+python3 scripts/summarize_results.py --dataset-version medium
+```
+
+Use `scripts/run_core_experiments.py` for current sweeps. `training/run_temporal_analysis.py` and `training/run_ablation.py` are older runners and do not match the current trainer CLI.
 
 ## Limitations
 
-- **Few aligned days** and **short calendar span** in the default example.  
-- **ERA5 vs PRISM** product mismatch (grid, physics, observations).  
-- **High metric variance** on small validation sets.  
-- **Georgia-only** bbox; no transfer claims.  
-- Next step for the codebase itself: extend downloads, or repair the optional temporal/ablation scripts to call the current trainer flags.
+- Short regional sample, especially in the default small run.
+- Georgia-only bbox; no transfer claim.
+- ERA5 and PRISM differ in grid, physics, and observation influence.
+- RMSE rankings are split-sensitive, so the stability tables matter.
+- Next useful step: add calendar coverage before changing model class.
 
-## Research Context
+## Notes
 
-**GraphCast**-class models and **Prithvi WxC**-style pretraining use **global domains and long multivariate archives** with large compute. This repository is a **small controlled** ERA5→PRISM study to test pipelines and baselines—not that scale.
-
-## References
-
-- [Literature notes](docs/research/literature_notes.md)  
-- [Research gap](docs/research/research_gap.md)  
-- [Next experiment plan](docs/research/next_experiment_plan.md)  
-
-Companion: **`notebooks/analysis.ipynb`** (plots, checkpoint reload from `results/experiments/core4_h3/` when you have run the grid).
+- Notebook companion: [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb)
+- Literature notes: [`docs/research/literature_notes.md`](docs/research/literature_notes.md)
+- Research gap: [`docs/research/research_gap.md`](docs/research/research_gap.md)
+- Next experiment plan: [`docs/research/next_experiment_plan.md`](docs/research/next_experiment_plan.md)
