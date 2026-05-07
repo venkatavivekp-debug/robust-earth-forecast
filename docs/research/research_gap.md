@@ -45,7 +45,7 @@ These points follow only from the archived metrics in `docs/experiments/final_co
 - Architectures are sized to match that evidence; optimization noise averages down.
 - Their benchmarks are forecasting or broad downscaling at reanalysis-like scales, not a single U.S. state with a handful of PRISM days.
 
-## The exact gap between this repo and those models
+## Gap to foundation-scale models
 
 - **Data volume and coverage:** This project aligns PRISM files to ERA5 for specific date ranges; operational-scale models use orders of magnitude more space–time volume.
 - **Task formulation:** Here the target is station-quality gridded observations at fine resolution; global models predict full atmospheric states on a fixed grid at coarser resolution or specialize with different targets.

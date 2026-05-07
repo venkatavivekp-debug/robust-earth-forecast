@@ -68,4 +68,4 @@ Medium was rerun with `split_seed` / `seed` values **42**, **7**, and **123**, w
 | CNN | core4 | 3 | 1.8810 ± 0.2539 |
 | ConvLSTM | t2m | 3 | 1.9028 ± 0.1547 |
 
-The exact winner is not fixed: ConvLSTM `core4_h3` wins seeds 42 and 7; seed 123 wins with ConvLSTM `t2m_h6`. By mean RMSE, ConvLSTM `core4_h6` is best and `core4_h3` is close. The stable claim is narrower: temporal ConvLSTM configurations are the strongest group, but history length and input set remain split-sensitive. ConvLSTM does **not** beat CNN in every matched setting, and `core4` does **not** consistently beat `t2m` for CNN.
+Winner varies by seed: ConvLSTM `core4_h3` wins seeds 42 and 7; seed 123 wins with ConvLSTM `t2m_h6`. By mean RMSE, ConvLSTM `core4_h6` is best and `core4_h3` is close. The useful takeaway is narrower: temporal ConvLSTM configurations are the strongest group, but history length and input set remain split-sensitive. ConvLSTM does **not** beat CNN in every matched setting, and `core4` does **not** consistently beat `t2m` for CNN.
