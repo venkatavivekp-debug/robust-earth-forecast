@@ -70,6 +70,10 @@ Across the three spatial benchmark seeds, border RMSE remains higher than center
 
 The U-Net boundary ablation isolates padding and decoder upsampling on the same medium `core4_h3` split. Replicate padding gives the lowest RMSE in this single run (`1.7995`), while ConvTranspose2d lowers the border/center ratio but does not beat the best full-image RMSE. Border error remains higher than center error for every variant, so boundary behavior is still active research rather than solved. Details: [`docs/experiments/boundary_ablation_results.md`](docs/experiments/boundary_ablation_results.md).
 
+## Undertraining Diagnosis
+
+A fixed-budget U-Net check with replicate padding and bilinear upsampling tested 80, 160, and 300 epochs on the same medium `core4_h3` split. The 300-epoch run gives a small RMSE gain (`1.7291` -> `1.7135`), but prediction variance stays below target variance and border/center RMSE remains near `1.18`. This suggests mild optimization headroom, not undertraining as the main cause of blur or boundary artifacts. Details: [`docs/experiments/undertraining_diagnosis_results.md`](docs/experiments/undertraining_diagnosis_results.md).
+
 ## Repository Structure
 
 - `data_pipeline/`: ERA5 and PRISM download/validation entry points.
@@ -151,6 +155,7 @@ Use `scripts/run_core_experiments.py` for archived encoder-decoder/ConvLSTM swee
 - Spatial benchmark protocol: [`docs/research/spatial_benchmark_protocol.md`](docs/research/spatial_benchmark_protocol.md)
 - Padding/boundary audit: [`docs/research/padding_boundary_audit.md`](docs/research/padding_boundary_audit.md)
 - Boundary ablation protocol: [`docs/research/boundary_ablation_protocol.md`](docs/research/boundary_ablation_protocol.md)
+- Undertraining diagnosis protocol: [`docs/research/undertraining_diagnosis_protocol.md`](docs/research/undertraining_diagnosis_protocol.md)
 - Controlled comparison protocol: [`docs/research/controlled_comparison_protocol.md`](docs/research/controlled_comparison_protocol.md)
 - Failure mode catalog: [`docs/research/failure_mode_catalog.md`](docs/research/failure_mode_catalog.md)
 - Refactor plan: [`docs/research/final_repo_refactor_plan.md`](docs/research/final_repo_refactor_plan.md)
