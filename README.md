@@ -60,6 +60,12 @@ Details: [`docs/experiments/spatial_benchmark.md`](docs/experiments/spatial_benc
 
 Three additional splits (seeds **42, 7, 123**) on **medium `core4` h3 direct** show **U-Net with the lowest mean RMSE** versus persistence and PlainEncoderDecoder, but **seed 123** is **mixed**: PlainEncoderDecoder RMSE is slightly **lower** than U-Net there. **Border RMSE stays above center RMSE** for every model and seed. See [`docs/experiments/spatial_benchmark_seed_stability.md`](docs/experiments/spatial_benchmark_seed_stability.md) and local `results/spatial_benchmark_seed_stability/summary.csv`.
 
+## Boundary Artifact Diagnosis
+
+Padding/upsampling settings were audited after Professor Hu's boundary-artifact feedback. The current models use bilinear interpolation and no deconvolution; `PlainEncoderDecoder` uses zero-padded `3x3` convs, while U-Net uses reflection-padded conv blocks.
+
+Across the three spatial benchmark seeds, border RMSE remains higher than center RMSE for persistence, `PlainEncoderDecoder`, and U-Net. U-Net lowers absolute border error on average, but it does not remove border degradation. The next step should be a controlled padding/upsampling/alignment ablation, not topography or temporal modeling yet. Details: [`docs/experiments/boundary_artifact_diagnosis.md`](docs/experiments/boundary_artifact_diagnosis.md).
+
 ## Repository Structure
 
 - `data_pipeline/`: ERA5 and PRISM download/validation entry points.
@@ -131,7 +137,7 @@ Use `scripts/run_core_experiments.py` for archived encoder-decoder/ConvLSTM swee
 - ERA5 and PRISM differ in grid, physics, and observation influence.
 - No static terrain field is used yet.
 - RMSE rankings are split-sensitive, so the stability tables matter.
-- The controlled U-Net result is one split only; multi-seed stability and terrain-aware diagnostics are still pending.
+- U-Net stability has been checked on three seeds, but boundary behavior remains unresolved.
 
 ## Notes
 
@@ -139,6 +145,7 @@ Use `scripts/run_core_experiments.py` for archived encoder-decoder/ConvLSTM swee
 - Repository philosophy: [`docs/research/repository_philosophy.md`](docs/research/repository_philosophy.md)
 - Baseline definition: [`docs/research/current_baseline_definition.md`](docs/research/current_baseline_definition.md)
 - Spatial benchmark protocol: [`docs/research/spatial_benchmark_protocol.md`](docs/research/spatial_benchmark_protocol.md)
+- Padding/boundary audit: [`docs/research/padding_boundary_audit.md`](docs/research/padding_boundary_audit.md)
 - Controlled comparison protocol: [`docs/research/controlled_comparison_protocol.md`](docs/research/controlled_comparison_protocol.md)
 - Failure mode catalog: [`docs/research/failure_mode_catalog.md`](docs/research/failure_mode_catalog.md)
 - Refactor plan: [`docs/research/final_repo_refactor_plan.md`](docs/research/final_repo_refactor_plan.md)
