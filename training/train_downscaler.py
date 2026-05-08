@@ -27,6 +27,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+PLAIN_ENCODER_DECODER_ALIASES = {"cnn", "plain_encoder_decoder"}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train ERA5->PRISM downscaling models")
@@ -50,7 +52,12 @@ def parse_args() -> argparse.Namespace:
         help="PRISM directory path (default: from --dataset-version)",
     )
     parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
-    parser.add_argument("--model", type=str, choices=["cnn", "unet", "convlstm"], default="convlstm")
+    parser.add_argument(
+        "--model",
+        type=str,
+        choices=["cnn", "plain_encoder_decoder", "unet", "convlstm"],
+        default="convlstm",
+    )
     parser.add_argument("--target-mode", type=str, choices=["direct", "residual"], default="direct")
     parser.add_argument("--history-length", type=int, default=5)
     parser.add_argument("--epochs", type=int, default=20)
@@ -177,11 +184,11 @@ def build_model(args: argparse.Namespace, sample_x: Any, sample_y: Any) -> Tuple
     from models.unet_downscaler import UNetDownscaler
 
     if args.target_mode == "residual" and args.model == "convlstm":
-        raise ValueError("target-mode residual is only supported for cnn/unet")
+        raise ValueError("target-mode residual is only supported for plain_encoder_decoder/cnn/unet")
 
-    if args.model in ("cnn", "unet"):
+    if args.model in (*PLAIN_ENCODER_DECODER_ALIASES, "unet"):
         in_channels = int(sample_x.shape[0] * sample_x.shape[1])
-        if args.model == "cnn":
+        if args.model in PLAIN_ENCODER_DECODER_ALIASES:
             base_channels = 32
             model = CNNDownscaler(in_channels=in_channels, out_channels=int(sample_y.shape[0]))
         else:

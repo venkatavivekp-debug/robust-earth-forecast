@@ -13,6 +13,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+PLAIN_ENCODER_DECODER_ALIASES = {"cnn", "plain_encoder_decoder"}
+
 
 def _configure_plot_cache() -> None:
     cache_root = PROJECT_ROOT / ".cache"
@@ -30,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--era5-path", type=str, default=None)
     parser.add_argument("--prism-path", type=str, default=None)
     parser.add_argument("--experiment-dir", type=str, default="results/experiments/core4_h3")
-    parser.add_argument("--model", choices=["cnn", "unet", "convlstm"], default="convlstm")
+    parser.add_argument("--model", choices=["cnn", "plain_encoder_decoder", "unet", "convlstm"], default="convlstm")
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--input-set", choices=["t2m", "core4", "extended"], default="core4")
     parser.add_argument("--history-length", type=int, default=3)
@@ -134,7 +136,11 @@ def main() -> None:
     device = resolve_device(args.device)
 
     experiment_dir = PROJECT_ROOT / args.experiment_dir
-    checkpoint = Path(args.checkpoint) if args.checkpoint else experiment_dir / "checkpoints" / f"{args.model}_best.pt"
+    if args.checkpoint:
+        checkpoint = Path(args.checkpoint)
+    else:
+        checkpoint_name = "cnn_best.pt" if args.model in PLAIN_ENCODER_DECODER_ALIASES else f"{args.model}_best.pt"
+        checkpoint = experiment_dir / "checkpoints" / checkpoint_name
     if not checkpoint.is_absolute():
         checkpoint = PROJECT_ROOT / checkpoint
     if not checkpoint.exists():

@@ -20,6 +20,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+PLAIN_ENCODER_DECODER_ALIASES = {"cnn", "plain_encoder_decoder"}
+LEARNED_MODEL_NAMES = ("cnn", "plain_encoder_decoder", "unet", "convlstm")
+
 
 def _configure_plot_cache() -> None:
     cache_root = PROJECT_ROOT / ".cache"
@@ -47,7 +50,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         nargs="+",
         default=["persistence", "era5_upsampled", "linear", "cnn", "convlstm"],
-        choices=["persistence", "era5_upsampled", "linear", "cnn", "unet", "convlstm"],
+        choices=["persistence", "era5_upsampled", "linear", "cnn", "plain_encoder_decoder", "unet", "convlstm"],
         help="Models/baselines to evaluate",
     )
     parser.add_argument("--history-length", type=int, default=5)
@@ -55,6 +58,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--num-samples", type=int, default=8)
     parser.add_argument("--cnn-checkpoint", type=str, default="checkpoints/cnn_best.pt")
+    parser.add_argument(
+        "--plain-encoder-decoder-checkpoint",
+        type=str,
+        default=None,
+        help="Checkpoint for the explicit plain_encoder_decoder alias (default: --cnn-checkpoint)",
+    )
     parser.add_argument("--unet-checkpoint", type=str, default="checkpoints/unet_best.pt")
     parser.add_argument("--convlstm-checkpoint", type=str, default="checkpoints/convlstm_best.pt")
     parser.add_argument(
@@ -74,7 +83,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--require-improvement",
         action="store_true",
-        help="If set, raise an error when CNN/ConvLSTM do not improve over persistence RMSE",
+        help="If set, raise an error when learned models do not improve over persistence RMSE",
     )
     return parser.parse_args()
 
@@ -160,7 +169,7 @@ def load_checkpoint_model(
     model_config = checkpoint.get("model_config", {})
     history_length = int(checkpoint.get("history_length", model_config.get("in_channels", 1)))
 
-    if model_name == "cnn":
+    if model_name in PLAIN_ENCODER_DECODER_ALIASES:
         model = CNNDownscaler(
             in_channels=int(model_config.get("in_channels", history_length)),
             out_channels=int(model_config.get("out_channels", 1)),
@@ -455,11 +464,12 @@ def main() -> None:
     learned_split_signatures: List[Tuple[Tuple[int, ...], Tuple[int, ...]]] = []
     checkpoint_paths = {
         "cnn": Path(args.cnn_checkpoint),
+        "plain_encoder_decoder": Path(args.plain_encoder_decoder_checkpoint or args.cnn_checkpoint),
         "unet": Path(args.unet_checkpoint),
         "convlstm": Path(args.convlstm_checkpoint),
     }
 
-    for model_name in [m for m in args.models if m in ("cnn", "unet", "convlstm")]:
+    for model_name in [m for m in args.models if m in LEARNED_MODEL_NAMES]:
         ckpt_path = checkpoint_paths[model_name]
         if not ckpt_path.exists():
             print(f"Skipping {model_name}: checkpoint not found at {ckpt_path}")
@@ -500,7 +510,7 @@ def main() -> None:
     else:
         # Research-grade consistency: if evaluating learned models, require split metadata
         # from checkpoints rather than implicitly generating a split.
-        requested_learned = any(m in ("cnn", "unet", "convlstm") for m in args.models)
+        requested_learned = any(m in LEARNED_MODEL_NAMES for m in args.models)
         if requested_learned and learned_models:
             raise RuntimeError(
                 "Learned model evaluation requires train/val split metadata in the checkpoint(s). "
@@ -522,7 +532,7 @@ def main() -> None:
     comparison_date: Optional[str] = None
 
     for model_name in args.models:
-        if model_name in ("cnn", "unet", "convlstm") and model_name not in learned_models:
+        if model_name in LEARNED_MODEL_NAMES and model_name not in learned_models:
             continue
 
         errors: List[Dict[str, float]] = []
@@ -661,7 +671,7 @@ def main() -> None:
     rmse_by_model = {str(r["model"]): float(r["rmse"]) for r in model_metrics_rows if "model" in r and "rmse" in r}
     if "persistence" in rmse_by_model:
         base = rmse_by_model["persistence"]
-        for learned in ("cnn", "unet", "convlstm"):
+        for learned in LEARNED_MODEL_NAMES:
             if learned in rmse_by_model and not (rmse_by_model[learned] < base):
                 msg = (
                     f"{learned} did not improve over persistence baseline: "
