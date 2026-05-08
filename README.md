@@ -64,7 +64,11 @@ Three additional splits (seeds **42, 7, 123**) on **medium `core4` h3 direct** s
 
 Padding/upsampling settings were audited after Professor Hu's boundary-artifact feedback. The current models use bilinear interpolation and no deconvolution; `PlainEncoderDecoder` uses zero-padded `3x3` convs, while U-Net uses reflection-padded conv blocks.
 
-Across the three spatial benchmark seeds, border RMSE remains higher than center RMSE for persistence, `PlainEncoderDecoder`, and U-Net. U-Net lowers absolute border error on average, but it does not remove border degradation. The next step should be a controlled padding/upsampling/alignment ablation, not topography or temporal modeling yet. Details: [`docs/experiments/boundary_artifact_diagnosis.md`](docs/experiments/boundary_artifact_diagnosis.md).
+Across the three spatial benchmark seeds, border RMSE remains higher than center RMSE for persistence, `PlainEncoderDecoder`, and U-Net. U-Net lowers absolute border error on average, but it does not remove border degradation. This motivated the controlled padding/upsampling ablation below, before adding topography or temporal modeling. Details: [`docs/experiments/boundary_artifact_diagnosis.md`](docs/experiments/boundary_artifact_diagnosis.md).
+
+## Controlled Boundary Ablation
+
+The U-Net boundary ablation isolates padding and decoder upsampling on the same medium `core4_h3` split. Replicate padding gives the lowest RMSE in this single run (`1.7995`), while ConvTranspose2d lowers the border/center ratio but does not beat the best full-image RMSE. Border error remains higher than center error for every variant, so boundary behavior is still active research rather than solved. Details: [`docs/experiments/boundary_ablation_results.md`](docs/experiments/boundary_ablation_results.md).
 
 ## Repository Structure
 
@@ -146,6 +150,7 @@ Use `scripts/run_core_experiments.py` for archived encoder-decoder/ConvLSTM swee
 - Baseline definition: [`docs/research/current_baseline_definition.md`](docs/research/current_baseline_definition.md)
 - Spatial benchmark protocol: [`docs/research/spatial_benchmark_protocol.md`](docs/research/spatial_benchmark_protocol.md)
 - Padding/boundary audit: [`docs/research/padding_boundary_audit.md`](docs/research/padding_boundary_audit.md)
+- Boundary ablation protocol: [`docs/research/boundary_ablation_protocol.md`](docs/research/boundary_ablation_protocol.md)
 - Controlled comparison protocol: [`docs/research/controlled_comparison_protocol.md`](docs/research/controlled_comparison_protocol.md)
 - Failure mode catalog: [`docs/research/failure_mode_catalog.md`](docs/research/failure_mode_catalog.md)
 - Refactor plan: [`docs/research/final_repo_refactor_plan.md`](docs/research/final_repo_refactor_plan.md)
