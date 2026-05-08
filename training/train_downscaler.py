@@ -29,7 +29,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train ERA5->PRISM downscaling models (CNN or ConvLSTM)")
+    parser = argparse.ArgumentParser(description="Train ERA5->PRISM downscaling models")
     parser.add_argument(
         "--dataset-version",
         type=str,
@@ -50,7 +50,8 @@ def parse_args() -> argparse.Namespace:
         help="PRISM directory path (default: from --dataset-version)",
     )
     parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
-    parser.add_argument("--model", type=str, choices=["cnn", "convlstm"], default="convlstm")
+    parser.add_argument("--model", type=str, choices=["cnn", "unet", "convlstm"], default="convlstm")
+    parser.add_argument("--target-mode", type=str, choices=["direct", "residual"], default="direct")
     parser.add_argument("--history-length", type=int, default=5)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=4)
@@ -173,14 +174,27 @@ def build_insufficient_samples_message(
 def build_model(args: argparse.Namespace, sample_x: Any, sample_y: Any) -> Tuple[Any, dict]:
     from models.cnn_downscaler import CNNDownscaler
     from models.convlstm_downscaler import ConvLSTMDownscaler
+    from models.unet_downscaler import UNetDownscaler
 
-    if args.model == "cnn":
+    if args.target_mode == "residual" and args.model == "convlstm":
+        raise ValueError("target-mode residual is only supported for cnn/unet")
+
+    if args.model in ("cnn", "unet"):
         in_channels = int(sample_x.shape[0] * sample_x.shape[1])
-        model = CNNDownscaler(in_channels=in_channels, out_channels=int(sample_y.shape[0]))
+        if args.model == "cnn":
+            base_channels = 32
+            model = CNNDownscaler(in_channels=in_channels, out_channels=int(sample_y.shape[0]))
+        else:
+            base_channels = 24
+            model = UNetDownscaler(
+                in_channels=in_channels,
+                out_channels=int(sample_y.shape[0]),
+                base_channels=base_channels,
+            )
         model_config = {
             "in_channels": in_channels,
             "out_channels": int(sample_y.shape[0]),
-            "base_channels": 32,
+            "base_channels": base_channels,
         }
         return model, model_config
 
@@ -253,6 +267,16 @@ def normalize_input_batch(
     return out
 
 
+def residual_base(x: torch.Tensor, target_size: Tuple[int, int]) -> torch.Tensor:
+    if x.dim() == 5:
+        latest = x[:, -1, 0:1, :, :]
+    elif x.dim() == 4:
+        latest = x[:, 0:1, :, :]
+    else:
+        raise ValueError(f"Unsupported ERA5 tensor shape for residual base: {tuple(x.shape)}")
+    return F.interpolate(latest, size=target_size, mode="bilinear", align_corners=False)
+
+
 def run_epoch(
     model: Any,
     loader: Any,
@@ -264,6 +288,7 @@ def run_epoch(
     input_mean: Optional[torch.Tensor],
     input_std: Optional[torch.Tensor],
     grad_clip: Optional[float],
+    target_mode: str,
 ) -> Tuple[float, float, Optional[float], Optional[float]]:
     model.train(mode=train)
     running_loss = 0.0
@@ -286,14 +311,23 @@ def run_epoch(
         x_model = normalize_input_batch(x, input_mean, input_std)
 
         with torch.set_grad_enabled(train):
-            preds = model(x_model, target_size=(y.shape[-2], y.shape[-1]))
-            if not torch.isfinite(preds).all():
+            raw_preds = model(x_model, target_size=(y.shape[-2], y.shape[-1]))
+            if not torch.isfinite(raw_preds).all():
                 raise RuntimeError("Model produced non-finite predictions")
-            if preds.shape != y.shape:
-                raise RuntimeError(f"Prediction/target shape mismatch: pred={tuple(preds.shape)} y={tuple(y.shape)}")
-            mse_loss = criterion(preds, y)
+            if raw_preds.shape != y.shape:
+                raise RuntimeError(f"Prediction/target shape mismatch: pred={tuple(raw_preds.shape)} y={tuple(y.shape)}")
+
+            if target_mode == "residual":
+                base = residual_base(x, target_size=(y.shape[-2], y.shape[-1]))
+                loss_target = y - base
+                final_preds = base + raw_preds
+            else:
+                loss_target = y
+                final_preds = raw_preds
+
+            mse_loss = criterion(raw_preds, loss_target)
             if l1_weight > 0.0:
-                l1_loss = F.l1_loss(preds, y)
+                l1_loss = F.l1_loss(raw_preds, loss_target)
                 loss = mse_loss + float(l1_weight) * l1_loss
             else:
                 loss = mse_loss
@@ -321,7 +355,7 @@ def run_epoch(
                 optimizer.step()
 
         running_loss += float(loss.item())
-        running_mse += float(mse_loss.item())
+        running_mse += float(F.mse_loss(final_preds, y).item())
 
     mean_loss = running_loss / max(1, len(loader))
     mean_mse = running_mse / max(1, len(loader))
@@ -503,6 +537,7 @@ def main() -> None:
             input_mean=input_mean,
             input_std=input_std,
             grad_clip=args.grad_clip,
+            target_mode=args.target_mode,
         )
         val_loss, val_rmse, _, _ = run_epoch(
             model,
@@ -515,6 +550,7 @@ def main() -> None:
             input_mean=input_mean,
             input_std=input_std,
             grad_clip=args.grad_clip,
+            target_mode=args.target_mode,
         )
 
         if scheduler is not None:
@@ -537,6 +573,7 @@ def main() -> None:
                     "epoch": epoch,
                     "best_val_loss": best_val_loss,
                     "history_length": int(args.history_length),
+                    "target_mode": args.target_mode,
                     "train_indices": train_indices,
                     "val_indices": val_indices,
                     "input_norm": {
@@ -587,6 +624,7 @@ def main() -> None:
             "model": args.model,
             "input_set": args.input_set,
             "history_length": int(args.history_length),
+            "target_mode": args.target_mode,
             "best_epoch": int(best_epoch),
             "best_val_loss": float(best_val_loss),
             "epochs": int(args.epochs),

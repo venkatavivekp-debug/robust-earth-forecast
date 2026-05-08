@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--era5-path", type=str, default=None)
     parser.add_argument("--prism-path", type=str, default=None)
     parser.add_argument("--experiment-dir", type=str, default="results/experiments/core4_h3")
-    parser.add_argument("--model", choices=["cnn", "convlstm"], default="convlstm")
+    parser.add_argument("--model", choices=["cnn", "unet", "convlstm"], default="convlstm")
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--input-set", choices=["t2m", "core4", "extended"], default="core4")
     parser.add_argument("--history-length", type=int, default=3)
@@ -126,6 +126,7 @@ def main() -> None:
     from datasets.dataset_paths import apply_dataset_version_to_args
     from datasets.prism_dataset import ERA5_PRISM_Dataset
     from evaluation.evaluate_model import load_checkpoint_model, normalize_input_batch, resolve_device, set_seed
+    from models.baselines import upsample_latest_era5
 
     args = parse_args()
     apply_dataset_version_to_args(args)
@@ -173,10 +174,16 @@ def main() -> None:
             x, y = dataset[sample_idx]
             xb = x.unsqueeze(0).to(device)
             yb = y.unsqueeze(0).to(device)
-            pred = model(
+            raw_pred = model(
                 normalize_input_batch(xb, input_norm),
                 target_size=(yb.shape[-2], yb.shape[-1]),
             )
+            if getattr(model, "target_mode", "direct") == "residual":
+                if args.model == "convlstm":
+                    raise RuntimeError("Residual target mode is not supported for ConvLSTM checkpoints")
+                pred = upsample_latest_era5(xb, target_size=(yb.shape[-2], yb.shape[-1])) + raw_pred
+            else:
+                pred = raw_pred
             if pred.shape != yb.shape:
                 raise RuntimeError(f"Prediction/target shape mismatch: pred={tuple(pred.shape)} y={tuple(yb.shape)}")
 
@@ -214,6 +221,7 @@ def main() -> None:
         "dataset_version": args.dataset_version,
         "experiment_dir": args.experiment_dir,
         "checkpoint": str(checkpoint.relative_to(PROJECT_ROOT) if checkpoint.is_relative_to(PROJECT_ROOT) else checkpoint),
+        "target_mode": getattr(model, "target_mode", "direct"),
         "input_set": args.input_set,
         "history_length": int(args.history_length),
         "border_pixels": int(args.border_pixels),

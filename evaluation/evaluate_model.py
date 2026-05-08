@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         nargs="+",
         default=["persistence", "era5_upsampled", "linear", "cnn", "convlstm"],
-        choices=["persistence", "era5_upsampled", "linear", "cnn", "convlstm"],
+        choices=["persistence", "era5_upsampled", "linear", "cnn", "unet", "convlstm"],
         help="Models/baselines to evaluate",
     )
     parser.add_argument("--history-length", type=int, default=5)
@@ -55,7 +55,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split-seed", type=int, default=42)
     parser.add_argument("--num-samples", type=int, default=8)
     parser.add_argument("--cnn-checkpoint", type=str, default="checkpoints/cnn_best.pt")
+    parser.add_argument("--unet-checkpoint", type=str, default="checkpoints/unet_best.pt")
     parser.add_argument("--convlstm-checkpoint", type=str, default="checkpoints/convlstm_best.pt")
+    parser.add_argument(
+        "--target-mode",
+        type=str,
+        choices=["direct", "residual"],
+        default="direct",
+        help="Fallback for checkpoints without target_mode metadata",
+    )
     parser.add_argument(
         "--device",
         type=str,
@@ -142,6 +150,7 @@ def load_checkpoint_model(
 ) -> Tuple[Any, int, Optional[Dict[str, List[float]]], Optional[str], Optional[List[int]], Optional[List[int]]]:
     from models.cnn_downscaler import CNNDownscaler
     from models.convlstm_downscaler import ConvLSTMDownscaler
+    from models.unet_downscaler import UNetDownscaler
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
@@ -157,6 +166,12 @@ def load_checkpoint_model(
             out_channels=int(model_config.get("out_channels", 1)),
             base_channels=int(model_config.get("base_channels", 32)),
         )
+    elif model_name == "unet":
+        model = UNetDownscaler(
+            in_channels=int(model_config.get("in_channels", history_length)),
+            out_channels=int(model_config.get("out_channels", 1)),
+            base_channels=int(model_config.get("base_channels", 24)),
+        )
     elif model_name == "convlstm":
         model = ConvLSTMDownscaler(
             input_channels=int(model_config.get("input_channels", 1)),
@@ -168,6 +183,9 @@ def load_checkpoint_model(
         raise ValueError(f"Unsupported checkpoint model type: {model_name}")
 
     model.load_state_dict(checkpoint["model_state_dict"])
+    target_mode = checkpoint.get("target_mode", checkpoint.get("args", {}).get("target_mode"))
+    if target_mode is not None:
+        model.target_mode = str(target_mode)
     model.to(device)
     model.eval()
     input_norm = checkpoint.get("input_norm")
@@ -437,10 +455,11 @@ def main() -> None:
     learned_split_signatures: List[Tuple[Tuple[int, ...], Tuple[int, ...]]] = []
     checkpoint_paths = {
         "cnn": Path(args.cnn_checkpoint),
+        "unet": Path(args.unet_checkpoint),
         "convlstm": Path(args.convlstm_checkpoint),
     }
 
-    for model_name in [m for m in args.models if m in ("cnn", "convlstm")]:
+    for model_name in [m for m in args.models if m in ("cnn", "unet", "convlstm")]:
         ckpt_path = checkpoint_paths[model_name]
         if not ckpt_path.exists():
             print(f"Skipping {model_name}: checkpoint not found at {ckpt_path}")
@@ -481,7 +500,7 @@ def main() -> None:
     else:
         # Research-grade consistency: if evaluating learned models, require split metadata
         # from checkpoints rather than implicitly generating a split.
-        requested_learned = any(m in ("cnn", "convlstm") for m in args.models)
+        requested_learned = any(m in ("cnn", "unet", "convlstm") for m in args.models)
         if requested_learned and learned_models:
             raise RuntimeError(
                 "Learned model evaluation requires train/val split metadata in the checkpoint(s). "
@@ -503,7 +522,7 @@ def main() -> None:
     comparison_date: Optional[str] = None
 
     for model_name in args.models:
-        if model_name in ("cnn", "convlstm") and model_name not in learned_models:
+        if model_name in ("cnn", "unet", "convlstm") and model_name not in learned_models:
             continue
 
         errors: List[Dict[str, float]] = []
@@ -531,10 +550,17 @@ def main() -> None:
                     pred = linear_model.predict(x, target_size=(y.shape[-2], y.shape[-1]))
                 else:
                     model, input_norm = learned_models[model_name]
-                    pred = model(
+                    raw_pred = model(
                         normalize_input_batch(x, input_norm),
                         target_size=(y.shape[-2], y.shape[-1]),
                     )
+                    target_mode = getattr(model, "target_mode", args.target_mode)
+                    if target_mode == "residual":
+                        if model_name == "convlstm":
+                            raise RuntimeError("Residual target mode is not supported for ConvLSTM checkpoints")
+                        pred = upsample_latest_era5(x, target_size=(y.shape[-2], y.shape[-1])) + raw_pred
+                    else:
+                        pred = raw_pred
 
                 if pred.shape != y.shape:
                     raise RuntimeError(
@@ -635,7 +661,7 @@ def main() -> None:
     rmse_by_model = {str(r["model"]): float(r["rmse"]) for r in model_metrics_rows if "model" in r and "rmse" in r}
     if "persistence" in rmse_by_model:
         base = rmse_by_model["persistence"]
-        for learned in ("cnn", "convlstm"):
+        for learned in ("cnn", "unet", "convlstm"):
             if learned in rmse_by_model and not (rmse_by_model[learned] < base):
                 msg = (
                     f"{learned} did not improve over persistence baseline: "
