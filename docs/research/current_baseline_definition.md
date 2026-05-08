@@ -1,6 +1,6 @@
 # Current baseline definition
 
-This note freezes the current historical `cnn` model as a baseline for future comparisons. The name `cnn` remains in checkpoints and CLIs for compatibility, but the model is better described as `PlainEncoderDecoder` or `EncoderDecoderBaseline`.
+This note freezes the current historical `cnn` model as a baseline for future comparisons. The name `cnn` remains in checkpoints and CLIs for compatibility. New commands can also use `plain_encoder_decoder`; both names point to the same `PlainEncoderDecoder` / `EncoderDecoderBaseline` behavior.
 
 ## What the architecture is
 
@@ -67,3 +67,9 @@ The model upsamples coarse feature maps with bilinear interpolation and then app
 ## Why keep it
 
 This model is now valuable as a controlled baseline. A proper U-Net should beat it not only in RMSE, but also in spatial diagnostics: sharper panels, lower border/center error, better gradient behavior, and more realistic residual structure.
+
+## Benchmark anchor
+
+The first controlled medium `core4_h3` direct benchmark puts this baseline at `2.2313389357026714` RMSE and `2.5037854530924526` border RMSE over all 18 validation samples. The skip-connected U-Net in the same protocol reaches `1.8938983473045878` RMSE and `2.1606650140879413` border RMSE.
+
+That makes the no-skip baseline useful as a reference: it is weaker than U-Net here, but still better than persistence and reproducible under the same split.

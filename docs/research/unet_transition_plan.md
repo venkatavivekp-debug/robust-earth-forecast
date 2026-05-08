@@ -70,7 +70,17 @@ If RMSE improves but the model still blurs gradients or keeps the same border ar
 
 ## Controlled comparison to run later
 
-The eventual comparison should be:
+The first controlled comparison now exists for medium `core4_h3`, direct target mode, seed 42:
+
+| Model | RMSE | MAE | Border RMSE | Center RMSE |
+| --- | ---: | ---: | ---: | ---: |
+| persistence | 2.8466506862243577 | 1.942786613336184 | 3.5825521603086234 | 2.559619644749001 |
+| PlainEncoderDecoder | 2.2313389357026714 | 1.7826750643192193 | 2.5037854530924526 | 2.134421349139709 |
+| U-Net | 1.8938983473045878 | 1.4901164816111936 | 2.1606650140879413 | 1.7978037822151207 |
+
+The U-Net improves RMSE and MAE over the no-skip baseline on this split. Border RMSE also drops in absolute terms, but the border/center ratio remains above 1.0. The result supports the skip-connected U-Net as the next spatial baseline, not as a finished solution.
+
+The next comparison should repeat:
 
 1. persistence / upsampled ERA5 baseline;
 2. current plain encoder-decoder baseline;

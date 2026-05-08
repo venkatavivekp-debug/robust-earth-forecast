@@ -1,6 +1,6 @@
 # Underperformance diagnosis
 
-Initial check covered `models/`, `training/`, `evaluation/`, `datasets/prism_dataset.py`, `notebooks/analysis.ipynb`, README figures, and committed experiment JSONs. This note now includes the controlled U-Net/residual follow-up on the same medium split.
+Initial check covered `models/`, `training/`, `evaluation/`, `datasets/prism_dataset.py`, `notebooks/analysis.ipynb`, README figures, and committed experiment JSONs. This note keeps the earlier U-Net/residual follow-up and points to the newer fixed-protocol spatial benchmark.
 
 ## Architecture notes
 
@@ -30,9 +30,9 @@ Border width: 8 PRISM pixels. Validation split comes from the stored `core4_h3` 
 
 Border artifacts are confirmed for the current checkpoints. Both learned models predict lower border means than the PRISM border mean; ConvLSTM has the larger border/center RMSE ratio, while the plain encoder-decoder baseline is worse overall.
 
-## Spatial baseline check
+## Earlier spatial baseline check
 
-Medium `core4_h3`, split seed 42, training seed 42. Border metrics use the full stored validation split (18 samples). The U-Net runs use bilinear upsampling plus `Conv2d` blocks with reflection padding; no `ConvTranspose2d` was added.
+Medium `core4_h3`, split seed 42, training seed 42. Border metrics use the full stored validation split (18 samples). The U-Net runs use bilinear upsampling plus `Conv2d` blocks with reflection padding; no `ConvTranspose2d` was added. This table is the earlier residual-target diagnosis, not the current fixed-protocol direct benchmark.
 
 | Model | Target mode | RMSE | MAE | Border RMSE | Center RMSE | Border/Center |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -47,6 +47,18 @@ U-Net direct is a clear improvement over the plain encoder-decoder baseline. Res
 
 ConvLSTM residual mode was skipped because the current ConvLSTM already adds an upsampled latest-`t2m` base internally. Adding the generic residual target mode there would make the residual definition ambiguous.
 
+## Current fixed-protocol direct benchmark
+
+The cleaner direct-target benchmark is now recorded in [`spatial_benchmark.md`](spatial_benchmark.md). It uses the same dataset, split, seed, target mode, optimizer settings, and all 18 validation samples for persistence, `PlainEncoderDecoder`, and U-Net.
+
+| Model | RMSE | MAE | Border RMSE | Center RMSE | Border/Center |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| persistence | 2.8466506862243577 | 1.942786613336184 | 3.5825521603086234 | 2.559619644749001 | 1.3996423912662743 |
+| PlainEncoderDecoder | 2.2313389357026714 | 1.7826750643192193 | 2.5037854530924526 | 2.134421349139709 | 1.1730511663508323 |
+| U-Net | 1.8938983473045878 | 1.4901164816111936 | 2.1606650140879413 | 1.7978037822151207 | 1.2018358374047526 |
+
+U-Net still improves over the no-skip baseline in direct mode, but border error remains higher than center error. This is a spatial baseline improvement, not a final claim about the downscaling problem.
+
 ## Likely source
 
 This does not look like a deconvolution artifact because there is no transposed convolution. The more likely source is weak spatial decoding plus edge behavior in padded convolutions. The plain encoder-decoder baseline is especially exposed because it predicts the full PRISM field without a residual path or skip connections. ConvLSTM helped in the archived grid partly because it already has a residual-style base, not only because of temporal memory.
@@ -55,7 +67,7 @@ Undertraining may contribute, but the new U-Net residual result shows the base s
 
 ## Next experiment plan
 
-1. Re-run the U-Net residual check across the same multi-seed splits used in the stability analysis.
-2. Compare history 1 vs 3 for U-Net residual before leaning on ConvLSTM.
+1. Re-run the fixed-protocol U-Net benchmark across the same multi-seed splits used in the stability analysis.
+2. Compare direct vs residual U-Net as a separate target-mode ablation, not as an architecture-only claim.
 3. Test topography/static fields only after adding real DEM data; no topography result is reported here.
 4. Keep the border diagnostic as a standard metric for new checkpoints.

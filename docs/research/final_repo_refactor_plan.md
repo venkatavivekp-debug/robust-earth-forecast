@@ -19,7 +19,7 @@ This is a conservative organization plan. It flags future work; it is not a dele
 
 - `models/cnn_downscaler.py`: keep for compatibility now, but the implementation is better named `plain_encoder_decoder.py`.
 - `CNNDownscaler`: keep as a checkpoint/script alias now; prefer `PlainEncoderDecoder` or `EncoderDecoderBaseline` in new research text.
-- `--model cnn` and `--cnn-checkpoint`: keep while archived results depend on the name; consider adding nonbreaking `plain_encoder_decoder` CLI aliases later.
+- `--model cnn` and `--cnn-checkpoint`: keep while archived results depend on the name; `--model plain_encoder_decoder` is now available as a nonbreaking alias for new controlled runs.
 - `scripts/run_core_experiments.py`: currently an archived encoder-decoder/ConvLSTM grid runner. A future spatial comparison runner may deserve a more explicit name.
 
 ## Archive later
@@ -44,4 +44,4 @@ These files may be generated, but they are also the evidence trail for the curre
 
 - Research notes overlap: `problem_structure.md`, `problem_structure_notes.md`, `unet_transition_plan.md`, and `current_baseline_definition.md` cover related ideas. Keep them for now, then merge after the next controlled U-Net comparison is complete.
 - The historical `cnn` alias is still present in code and result paths. This is intentional for reproducibility, but all new text should call the concept `PlainEncoderDecoder` or `EncoderDecoderBaseline`.
-- The existing U-Net result is a preliminary spatial check. The repository still needs one controlled comparison table that freezes split, normalization, target mode, and diagnostics across persistence, `PlainEncoderDecoder`, and proper skip-connected U-Net.
+- The controlled spatial benchmark now freezes split, normalization, target mode, and diagnostics across persistence, `PlainEncoderDecoder`, and skip-connected U-Net. It is still one split and needs a seed repeat.

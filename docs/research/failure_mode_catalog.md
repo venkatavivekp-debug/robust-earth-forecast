@@ -1,6 +1,6 @@
 # Failure mode catalog
 
-Use this as a checklist when comparing persistence, `PlainEncoderDecoder`, and a future proper U-Net. Most failures should be diagnosed with both scalar metrics and maps.
+Use this as a checklist when comparing persistence, `PlainEncoderDecoder`, and the skip-connected U-Net. Most failures should be diagnosed with both scalar metrics and maps.
 
 ## Oversmoothing
 
@@ -39,6 +39,8 @@ Current note: the existing models use bilinear interpolation, not `ConvTranspose
 - **Likely data causes:** target grid clipped to domain, edge pixels have less spatial context, PRISM/ERA5 alignment differences.
 - **Diagnostics:** border RMSE, center RMSE, border/center ratio, border prediction mean/min/max, border mask panel.
 
+Benchmark note: in the controlled medium `core4_h3` run, U-Net reduced absolute border RMSE from `2.5038` to `2.1607` relative to `PlainEncoderDecoder`, but border RMSE stayed above center RMSE (`1.7978`). The edge issue is reduced, not removed.
+
 ## Instability across runs
 
 - **Visual symptoms:** same configuration gives different quality across seeds.
@@ -59,3 +61,7 @@ Current note: the existing models use bilinear interpolation, not `ConvTranspose
 - **Likely architectural causes:** MSE/L1 losses favor central tendency, decoder smooths peaks, no uncertainty modeling.
 - **Likely data causes:** rare extremes, short archive, missing terrain/static controls.
 - **Diagnostics:** error by target quantile, max/min prediction comparison, event-day panels, bias by temperature regime.
+
+## Current benchmark read
+
+The controlled spatial benchmark is useful mainly because it separates the spatial architecture question from temporal recurrence. U-Net improves the direct spatial baseline on one split, while gradient/error correlation remains weak (`r ~= 0.049` for U-Net). That leaves terrain/static predictors, split stability, and gradient-aware diagnostics as open work.

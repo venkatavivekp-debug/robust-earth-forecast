@@ -2,7 +2,7 @@
 
 Future architecture comparisons should isolate one change at a time. If the dataset, split, normalization, loss, target mode, and model architecture all change together, the result is not interpretable.
 
-The next clean comparison is:
+The clean spatial comparison is:
 
 1. persistence / upsampled ERA5;
 2. `PlainEncoderDecoder` (`cnn` alias, no skip connections);
@@ -78,11 +78,11 @@ Current code checks:
 
 Current risks:
 
-- The CLI alias `cnn` is still used for the plain encoder-decoder baseline. Future docs/results should label it clearly.
+- Historical checkpoints still use the CLI alias `cnn`; new commands can use `plain_encoder_decoder` for the same no-skip baseline.
 - `--target-mode residual` changes the learning problem. Direct and residual runs should not be mixed as if they were only architecture changes.
 - ConvLSTM already adds an upsampled latest-`t2m` base internally, so generic residual mode is not comparable for ConvLSTM.
 - `num_samples` can restrict evaluation to the first validation samples. For architecture comparisons, use the same full validation set or document the subset.
-- Existing summary JSONs are ConvLSTM-grid oriented and do not yet define a schema for the spatial U-Net comparison.
+- The first spatial benchmark summary is committed as `docs/experiments/spatial_benchmark_summary.json`, but it is still a single split.
 - Plot ranges are consistent within each panel, but separate panels may not share identical ranges unless explicitly generated together.
 
 ## Minimum report for the next comparison
