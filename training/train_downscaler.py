@@ -81,6 +81,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--hidden-channels", type=int, default=32, help="Hidden channels for ConvLSTM")
     parser.add_argument(
+        "--unet-padding-mode",
+        type=str,
+        choices=["reflection", "zero", "replicate"],
+        default="reflection",
+        help="Boundary padding used by the U-Net convolution blocks",
+    )
+    parser.add_argument(
+        "--unet-upsampling-mode",
+        type=str,
+        choices=["bilinear", "convtranspose"],
+        default="bilinear",
+        help="U-Net decoder upsampling path",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default="auto",
@@ -197,12 +211,17 @@ def build_model(args: argparse.Namespace, sample_x: Any, sample_y: Any) -> Tuple
                 in_channels=in_channels,
                 out_channels=int(sample_y.shape[0]),
                 base_channels=base_channels,
+                padding_mode=str(args.unet_padding_mode),
+                upsample_mode=str(args.unet_upsampling_mode),
             )
         model_config = {
             "in_channels": in_channels,
             "out_channels": int(sample_y.shape[0]),
             "base_channels": base_channels,
         }
+        if args.model == "unet":
+            model_config["padding_mode"] = str(args.unet_padding_mode)
+            model_config["upsample_mode"] = str(args.unet_upsampling_mode)
         return model, model_config
 
     model = ConvLSTMDownscaler(

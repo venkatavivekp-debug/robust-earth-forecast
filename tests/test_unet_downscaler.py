@@ -46,6 +46,31 @@ class UNetDownscalerSmokeTest(unittest.TestCase):
         self.assertEqual(seen_channels["dec2"], 8 * 4 + 8 * 2)
         self.assertEqual(seen_channels["dec1"], 8 * 2 + 8)
 
+    def test_padding_and_upsampling_variants_keep_output_shape(self) -> None:
+        x = torch.randn(1, 3, 4, 9, 11)
+        for padding_mode in ("reflection", "zero", "replicate"):
+            model = UNetDownscaler(
+                in_channels=12,
+                out_channels=1,
+                base_channels=8,
+                padding_mode=padding_mode,
+                upsample_mode="bilinear",
+            )
+            self.assertEqual(tuple(model(x, target_size=(31, 39)).shape), (1, 1, 31, 39))
+
+        model = UNetDownscaler(
+            in_channels=12,
+            out_channels=1,
+            base_channels=8,
+            padding_mode="reflection",
+            upsample_mode="convtranspose",
+        )
+        y = model(x, target_size=(31, 39))
+        self.assertEqual(tuple(y.shape), (1, 1, 31, 39))
+        y.mean().backward()
+        self.assertIsNotNone(model.up2.weight.grad)
+        self.assertGreater(float(model.up2.weight.grad.abs().sum()), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

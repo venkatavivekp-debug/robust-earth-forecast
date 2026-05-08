@@ -180,6 +180,8 @@ def load_checkpoint_model(
             in_channels=int(model_config.get("in_channels", history_length)),
             out_channels=int(model_config.get("out_channels", 1)),
             base_channels=int(model_config.get("base_channels", 24)),
+            padding_mode=str(model_config.get("padding_mode", "reflection")),
+            upsample_mode=str(model_config.get("upsample_mode", "bilinear")),
         )
     elif model_name == "convlstm":
         model = ConvLSTMDownscaler(
