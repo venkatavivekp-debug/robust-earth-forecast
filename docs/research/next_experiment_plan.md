@@ -1,8 +1,10 @@
-# Next experiment plan
+# Archived experiment plan
+
+This is an older temporal/data-scaling plan kept for context. The active next phase is now topography/static spatial context, described in [`topography_context_plan.md`](topography_context_plan.md), after the U-Net, boundary, padding, and undertraining diagnostics.
+
+The commands below may still be useful for reproducing archived encoder-decoder/ConvLSTM sweeps, but they are not the current research direction.
 
 Three focused studies. Commands assume the repo root as working directory, dependencies from `requirements.txt`, and existing `data_raw/era5_georgia_multi.nc` plus PRISM rasters under `data_raw/prism`. Adjust paths if yours differ.
-
-This is an older experiment note. Keep it as archived context until the spatial reconstruction comparison is finished.
 
 Use `scripts/run_core_experiments.py` for archived sweeps: it trains the plain encoder-decoder (`cnn` alias) and ConvLSTM, evaluates against persistence, and appends `results/experiments/summary.csv`. Add `--overwrite` to replace prior runs under `results/experiments/`.
 

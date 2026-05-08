@@ -51,6 +51,6 @@ These points follow only from the archived metrics in `docs/experiments/final_co
 - **Task formulation:** Here the target is station-quality gridded observations at fine resolution; global models predict full atmospheric states on a fixed grid at coarser resolution or specialize with different targets.
 - **Compute and personnel:** Foundation and global forecasting models assume clusters and curated data pipelines; this repo is a laptop-scale controlled study.
 
-## Most realistic next step
+## Current next step
 
-Extend aligned ERA5/PRISM coverage in time (more months or years), keep architecture fixed, and re-run the same history-length and input-set sweeps so improvements (or lack thereof) reflect sample growth rather than new layers. Until the sample count rises, treat any architecture change as poorly identified.
+This note predates the controlled U-Net, boundary, padding, and undertraining diagnostics. Those later checks suggest that another temporal or architecture-first sweep is not the cleanest next move. The current next step is to add real static spatial context, especially DEM-derived topography, to the fixed U-Net spatial benchmark and test whether it improves local structure, blur, and border behavior under the same split/metrics.

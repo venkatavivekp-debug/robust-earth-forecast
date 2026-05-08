@@ -67,7 +67,6 @@ Undertraining may contribute, but the new U-Net residual result shows the base s
 
 ## Next experiment plan
 
-1. Re-run the fixed-protocol U-Net benchmark across the same multi-seed splits used in the stability analysis.
-2. Compare direct vs residual U-Net as a separate target-mode ablation, not as an architecture-only claim.
-3. Test topography/static fields only after adding real DEM data; no topography result is reported here.
-4. Keep the border diagnostic as a standard metric for new checkpoints.
+This note is now superseded by the later spatial benchmark, seed stability, boundary ablation, and undertraining diagnosis. The active next step is to test real topography/static fields after adding DEM data. No topography result is reported here.
+
+Keep the border diagnostic as a standard metric for new checkpoints.
