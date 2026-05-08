@@ -2,7 +2,9 @@
 
 Three focused studies. Commands assume the repo root as working directory, dependencies from `requirements.txt`, and existing `data_raw/era5_georgia_multi.nc` plus PRISM rasters under `data_raw/prism`. Adjust paths if yours differ.
 
-Use `scripts/run_core_experiments.py` for sweeps: it trains CNN and ConvLSTM, evaluates against persistence, and appends `results/experiments/summary.csv`. Add `--overwrite` to replace prior runs under `results/experiments/`.
+This is an older experiment note. Keep it as archived context until the spatial reconstruction comparison is finished.
+
+Use `scripts/run_core_experiments.py` for archived sweeps: it trains the plain encoder-decoder (`cnn` alias) and ConvLSTM, evaluates against persistence, and appends `results/experiments/summary.csv`. Add `--overwrite` to replace prior runs under `results/experiments/`.
 
 ---
 
@@ -138,7 +140,7 @@ python3 evaluation/evaluate_model.py \
   --results-dir results/eval_ablation/extended
 ```
 
-Train and pass a CNN checkpoint as well if you want CNN in `--models`; the commands above isolate ConvLSTM against baselines only.
+Train and pass a plain encoder-decoder (`cnn`) checkpoint as well if you want that baseline in `--models`; the commands above isolate ConvLSTM against baselines only.
 
 **Expected behavior.** RMSE ordering `t2m` ≥ `core4` often holds for temperature downscaling when winds and pressure are available; `extended` may help or add noise.
 
