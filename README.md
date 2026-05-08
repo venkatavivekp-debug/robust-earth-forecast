@@ -56,6 +56,10 @@ The skip-connected U-Net improves over the no-skip baseline on this split, but b
 
 Details: [`docs/experiments/spatial_benchmark.md`](docs/experiments/spatial_benchmark.md). Earlier residual and ConvLSTM diagnostics are kept in [`docs/experiments/underperformance_diagnosis.md`](docs/experiments/underperformance_diagnosis.md).
 
+## Seed stability (spatial benchmark)
+
+Three additional splits (seeds **42, 7, 123**) on **medium `core4` h3 direct** show **U-Net with the lowest mean RMSE** versus persistence and PlainEncoderDecoder, but **seed 123** is **mixed**: PlainEncoderDecoder RMSE is slightly **lower** than U-Net there. **Border RMSE stays above center RMSE** for every model and seed. See [`docs/experiments/spatial_benchmark_seed_stability.md`](docs/experiments/spatial_benchmark_seed_stability.md) and local `results/spatial_benchmark_seed_stability/summary.csv`.
+
 ## Repository Structure
 
 - `data_pipeline/`: ERA5 and PRISM download/validation entry points.
