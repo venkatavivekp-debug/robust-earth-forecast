@@ -15,6 +15,7 @@ The repository now centers on controlled spatial evidence:
 - Border RMSE remains higher than center RMSE for persistence, `PlainEncoderDecoder`, and U-Net.
 - Padding/upsampling ablations changed the error profile but did not remove blur or boundary degradation.
 - A fixed-budget undertraining check found only mild improvement at 300 epochs.
+- Spatial sharpness diagnostics show U-Net lowers RMSE while still losing much of the PRISM-scale gradient/detail structure.
 - Temporal modeling and ConvLSTM are archived, not the next active direction.
 
 The next grounded phase is static spatial context, especially real topography/DEM-derived channels, under the same controlled U-Net evaluation.
@@ -49,6 +50,7 @@ Full write-ups:
 - [`docs/experiments/boundary_artifact_diagnosis.md`](docs/experiments/boundary_artifact_diagnosis.md)
 - [`docs/experiments/boundary_ablation_results.md`](docs/experiments/boundary_ablation_results.md)
 - [`docs/experiments/undertraining_diagnosis_results.md`](docs/experiments/undertraining_diagnosis_results.md)
+- [`docs/experiments/spatial_sharpness_diagnosis.md`](docs/experiments/spatial_sharpness_diagnosis.md)
 
 ## Research Progression
 
@@ -61,6 +63,8 @@ Full write-ups:
 ## Why Topography Next
 
 Professor Hu suggested topography after the blurred-output and boundary checks. That is physically plausible: elevation, slope, aspect, and terrain gradients affect local temperature and are part of what PRISM is designed to represent. The current ERA5 variables (`t2m`, `u10`, `v10`, `sp`) do not provide PRISM-scale terrain structure.
+
+The sharpness diagnosis supports this direction: U-Net improves RMSE, but its gradient magnitude and local contrast remain well below PRISM. That points to missing fine-scale spatial information, not just an undertrained decoder.
 
 The topography phase is not implemented yet. The plan is to add real DEM-derived static covariates, likely from a public source such as USGS 3DEP/NED, and compare:
 
@@ -128,6 +132,7 @@ Current diagnostic runners:
 python3 scripts/run_spatial_benchmark.py --dataset-version medium --input-set core4 --history-length 3
 python3 scripts/run_boundary_ablation.py --dataset-version medium --input-set core4 --history-length 3
 python3 scripts/run_undertraining_diagnosis.py --dataset-version medium --input-set core4 --history-length 3
+python3 scripts/diagnose_spatial_sharpness.py --dataset-version medium --input-set core4 --history-length 3
 ```
 
 ## Limitations
