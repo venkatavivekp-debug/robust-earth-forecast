@@ -1,6 +1,6 @@
 # Underperformance diagnosis
 
-Checked `models/`, `training/`, `evaluation/`, `datasets/prism_dataset.py`, `notebooks/analysis.ipynb`, README figures, and committed experiment JSONs. No model code was changed.
+Initial check covered `models/`, `training/`, `evaluation/`, `datasets/prism_dataset.py`, `notebooks/analysis.ipynb`, README figures, and committed experiment JSONs. This note now includes the controlled U-Net/residual follow-up on the same medium split.
 
 ## Architecture notes
 
@@ -30,16 +30,32 @@ Border width: 8 PRISM pixels. Validation split comes from the stored `core4_h3` 
 
 Border artifacts are confirmed for the current checkpoints. Both learned models predict lower border means than the PRISM border mean; ConvLSTM has the larger border/center RMSE ratio, while CNN is worse overall.
 
+## Spatial baseline check
+
+Medium `core4_h3`, split seed 42, training seed 42. Border metrics use the full stored validation split (18 samples). The U-Net runs use bilinear upsampling plus `Conv2d` blocks with reflection padding; no `ConvTranspose2d` was added.
+
+| Model | Target mode | RMSE | MAE | Border RMSE | Center RMSE | Border/Center |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| CNN `core4_h3` | direct | 2.1599 | 1.7344 | 2.3553 | 2.0918 | 1.1260 |
+| U-Net `core4_h3` | direct | 1.7704 | 1.3709 | 2.0384 | 1.6731 | 1.2183 |
+| U-Net `core4_h3` | residual | 1.5001 | 1.1417 | 1.8015 | 1.3871 | 1.2988 |
+| ConvLSTM `core4_h3` | direct | 1.6705 | 1.2657 | 2.1265 | 1.4909 | 1.4263 |
+
+Panel from the best spatial run: ![U-Net residual border diagnostic](../images/spatial_model_check_unet_residual.png)
+
+U-Net direct is a clear improvement over the plain CNN. Residual prediction improves again and gives the best RMSE in this controlled check, including lower border RMSE than ConvLSTM. It does not remove the artifact: border error is still about 30% above center error.
+
+ConvLSTM residual mode was skipped because the current ConvLSTM already adds an upsampled latest-`t2m` base internally. Adding the generic residual target mode there would make the residual definition ambiguous.
+
 ## Likely source
 
-This does not look like a deconvolution artifact because there is no transposed convolution. The more likely source is the combination of zero-padded convolutions near image edges, bilinear feature upsampling, and weak spatial decoding. CNN is especially exposed because it predicts the full PRISM field without a residual path or skip connections. ConvLSTM is better because it adds an upsampled latest-`t2m` base, but its residual readout still uses padded convs after a smooth upsample.
+This does not look like a deconvolution artifact because there is no transposed convolution. The more likely source is weak spatial decoding plus edge behavior in padded convolutions. CNN is especially exposed because it predicts the full PRISM field without a residual path or skip connections. ConvLSTM helped in the archived grid partly because it already has a residual-style base, not only because of temporal memory.
 
-Undertraining may contribute for CNN, but the ConvLSTM result is not just a missing-epochs story: the saved best epoch is late in training, and the visual issue is spatially structured. Missing context and limited data remain real, but the first thing to test is the base spatial decoder.
+Undertraining may contribute, but the new U-Net residual result shows the base spatial decoder was a real bottleneck. Missing context and limited data remain real, but adding temporal complexity before fixing the spatial baseline would have been hard to interpret.
 
 ## Next experiment plan
 
-1. Keep the same data, split, metrics, and `core4_h3` setup.
-2. Add one spatial baseline at a time: first a small U-Net-style CNN with skip connections, then a residual CNN that predicts a correction to upsampled latest `t2m`.
-3. Try reflection padding or explicit valid-region scoring only as a controlled ablation; do not mix it with architecture changes.
-4. Add topography/static fields after the spatial decoder is fixed enough to separate architecture artifacts from missing terrain signal.
-5. Re-run this border diagnostic for every new spatial model. Only lean on ConvLSTM if history 3/6 still beats history 1 after the spatial decoder issue is addressed.
+1. Re-run the U-Net residual check across the same multi-seed splits used in the stability analysis.
+2. Compare history 1 vs 3 for U-Net residual before leaning on ConvLSTM.
+3. Test topography/static fields only after adding real DEM data; no topography result is reported here.
+4. Keep the border diagnostic as a standard metric for new checkpoints.

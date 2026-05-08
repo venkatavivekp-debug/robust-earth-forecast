@@ -31,12 +31,18 @@ Figures above are committed outputs from the `core4_h3` evaluation run. Full tab
 
 All results are reported with variability across splits rather than as a single clean run.
 
+### Spatial Baseline Check
+
+The border diagnostic confirmed that the old plain CNN was weak. On the medium `core4_h3` validation split, a small residual U-Net reached **1.5001 RMSE** with **1.8015 border RMSE**, compared with **2.1599 RMSE** for CNN direct and **1.6705 RMSE** for ConvLSTM direct on the same diagnostic. Residual U-Net helped, but border error is still higher than center error.
+
+Details: [`docs/experiments/underperformance_diagnosis.md`](docs/experiments/underperformance_diagnosis.md).
+
 ## Data and Models
 
 - **Predictors:** ERA5 over Georgia, mainly `t2m` and `core4` (`t2m`, `u10`, `v10`, `sp`).
 - **Target:** PRISM daily mean temperature (`tmean`).
 - **Histories:** 1, 3, and 6 days.
-- **Models:** CNN stacks history as channels; ConvLSTM keeps the time axis explicit.
+- **Models:** CNN stacks history as channels; ConvLSTM keeps the time axis explicit; U-Net is a small spatial baseline for the border-artifact check.
 - **Baselines:** persistence, upsampled ERA5, and a linear baseline.
 
 Default small data is January 2023. Medium data is 2023-01-01 through 2023-03-31.
@@ -77,7 +83,7 @@ Use `scripts/run_core_experiments.py` for current sweeps. `training/run_temporal
 - Georgia-only bbox; no transfer claim.
 - ERA5 and PRISM differ in grid, physics, and observation influence.
 - RMSE rankings are split-sensitive, so the stability tables matter.
-- Next useful step: add calendar coverage before changing model class.
+- Next useful step: rerun residual U-Net across seeds, then test real terrain/static fields if DEM data is added.
 
 ## Notes
 
