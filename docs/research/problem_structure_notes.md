@@ -4,7 +4,7 @@ ERA5 -> PRISM downscaling is not just image sharpening. The input is a coarse re
 
 ## Persistence is strong
 
-Latest ERA5 `t2m` already carries the large-scale daily temperature state. After bilinear upsampling it often lands close enough to PRISM that a learned model has to improve a residual, not reconstruct the whole field from scratch. That is why persistence is the baseline to beat rather than a toy comparison.
+Latest ERA5 `t2m` already carries the large-scale daily temperature state. After bilinear upsampling it often lands close enough to PRISM that a learned model has to improve a residual, not reconstruct the whole field from scratch. That is why persistence is the baseline to beat rather than a placeholder comparison.
 
 ## What PRISM adds
 
@@ -16,7 +16,7 @@ Bilinear ERA5 preserves the synoptic pattern but smooths local gradients and kee
 
 ## Why the borders failed
 
-The old CNN had a weak decoder: same-grid convolutions, smooth feature upsampling, then a shallow high-resolution readout. Near clipped regional edges, padded convolution sees artificial context. The diagnostic showed larger border error than center error, especially for the ConvLSTM residual readout.
+The old plain encoder-decoder had a weak decoder: same-grid convolutions, smooth feature upsampling, then a shallow high-resolution readout. Near clipped regional edges, padded convolution sees artificial context. The diagnostic showed larger border error than center error, especially for the ConvLSTM residual readout.
 
 ## Skip connections and residuals
 

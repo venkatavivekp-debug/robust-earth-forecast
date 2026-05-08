@@ -1,6 +1,6 @@
 # Literature notes (ERA5 → PRISM context)
 
-Short summaries tied to this repository: regional statistical downscaling with small aligned samples, CNN/ConvLSTM baselines, and comparison to persistence. No new methods are implied here—only what is useful to read next.
+Short summaries tied to this repository: regional statistical downscaling with small aligned samples, the plain encoder-decoder (`cnn`) and ConvLSTM baselines, and comparison to persistence. No new methods are implied here—only what is useful to read next.
 
 ---
 
@@ -13,7 +13,7 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** It is a concrete example of how modern practice couples huge data volume, many variables, and long temporal context before specialization.
 
-**Useful here.** Treat multivariate inputs and temporal windows as first-class design choices; keep evaluation against simple baselines; document data limits explicitly.
+**Useful here.** Treat multivariate inputs and temporal windows as first-class design choices; keep evaluation against low-complexity baselines; document data limits explicitly.
 
 **Out of scope.** Model size, compute budget, and global/long-record pretraining are outside this repo’s current data volume.
 
@@ -57,7 +57,7 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Useful here.** Thinking in terms of operator/view that matches grid structure; careful normalization and multi-channel inputs at the *conceptual* level.
 
-**Out of scope.** Training infrastructure and global 6-hourly archives at full resolution are not available in this prototype.
+**Out of scope.** Training infrastructure and global 6-hourly archives at full resolution are not available in this regional setup.
 
 ---
 
@@ -69,7 +69,7 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 **Why it matters here.** It aligns with the repo’s actual problem class: learn a mapping from coarse predictors to a finer grid with documented procedures.
 
-**Useful here.** Clear experiment logging, held-out evaluation, and reporting relative to simpler mappings.
+**Useful here.** Clear experiment logging, held-out evaluation, and reporting relative to lower-complexity mappings.
 
 **Out of scope.** Their setups still assume substantially more data and often broader domains than a short PRISM window over one state.
 
@@ -117,7 +117,7 @@ Short summaries tied to this repository: regional statistical downscaling with s
 
 ---
 
-## Quick index
+## Index
 
 | Reference | Role in this project |
 |-----------|----------------------|

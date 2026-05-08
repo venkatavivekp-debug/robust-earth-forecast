@@ -2,7 +2,7 @@
 Spatial error vs PRISM gradient analysis (best ConvLSTM: core4, history=3).
 
 Computes pixel-wise absolute error, mean maps over the evaluation split,
-PRISM gradient magnitude via simple finite differences, and the correlation
+PRISM gradient magnitude via finite differences, and the correlation
 between mean gradient and mean absolute error per pixel.
 
 Does not change model training or architectures.
@@ -201,7 +201,7 @@ def main() -> None:
     else:
         conclusion = (
             f"Correlation between mean gradient and mean absolute error is near zero (r={correlation:.3f}). "
-            "A simple gradient proxy does not strongly predict where the model fails; inspect spatial maps for structure."
+            "The gradient proxy does not strongly predict where the model fails; inspect spatial maps for structure."
         )
 
     out_json = PROJECT_ROOT / args.output_json

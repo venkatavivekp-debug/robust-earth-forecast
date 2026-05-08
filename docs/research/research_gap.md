@@ -1,10 +1,10 @@
 # Research gap (this repository vs mainstream weather ML)
 
-## What this repository already demonstrates
+## What this repository already shows
 
 - A reproducible path from downloaded ERA5 NetCDF and PRISM rasters to aligned daily samples, with explicit checks on date overlap, history windows, and finite values.
 - Controlled train/validation splits with split metadata carried in checkpoints so evaluation matches training.
-- CNN and ConvLSTM baselines that map a short ERA5 history to a higher-resolution PRISM temperature field, plus persistence, upsampled ERA5, and a global linear baseline.
+- A plain encoder-decoder baseline (`cnn` alias) and a ConvLSTM baseline that map a short ERA5 history to a higher-resolution PRISM temperature field, plus persistence, upsampled ERA5, and a global linear baseline.
 - Scripted sweeps over input channel sets (`t2m` vs `core4`) and history length, with RMSE/MAE logged against persistence.
 - Documented behavior where learned models sometimes fail to beat persistence when history is too short or the setup is unfavorable.
 
@@ -16,7 +16,7 @@ These points follow only from the archived metrics in `docs/experiments/final_co
 - **ConvLSTM uses temporal structure**: at **history 1** its RMSE is far above persistence for both `t2m` and `core4`; at **history 3** it drops below persistence for both input sets—so a short multi-day window matters for this model class here.
 - **Multi-variable input gives a clear gain at the best history**: `core4` at history 3 beats `t2m` at history 3 (lower RMSE), consistent with winds and surface pressure carrying usable signal beyond 2 m temperature alone.
 - **Performance is unstable across history length**: history 6 is worse than history 3 for ConvLSTM RMSE on both input sets even where it still beats persistence (`core4`) or fails (`t2m`)—not a smooth “more context is better” curve.
-- **Spatial learning is weak in the sense tested**: gradient–error correlation on the best ConvLSTM run is small in `docs/experiments/error_analysis.json`, so residual error is not dominated by a simple “steep slopes” story; fine-grid structure remains hard.
+- **Spatial learning is weak in the sense tested**: gradient–error correlation on the best ConvLSTM run is small in `docs/experiments/error_analysis.json`, so residual error is not dominated by a single “steep slopes” story; fine-grid structure remains hard.
 
 ## Why it often struggles to beat persistence
 
