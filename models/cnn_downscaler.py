@@ -8,11 +8,14 @@ import torch.nn.functional as F
 
 
 class CNNDownscaler(nn.Module):
-    """Spatial CNN baseline for ERA5 -> PRISM downscaling.
+    """Plain encoder-decoder baseline for ERA5 -> PRISM downscaling.
 
     Accepts either:
     - [B, T, C, H, W] (temporal windows) or
     - [B, C, H, W] (already channel-stacked)
+
+    Historical checkpoints and CLIs still use the name ``cnn``. This module
+    does not implement U-Net skip connections.
     """
 
     def __init__(self, in_channels: int = 4, out_channels: int = 1, base_channels: int = 32) -> None:
@@ -60,3 +63,7 @@ class CNNDownscaler(nn.Module):
             align_corners=False,
         )
         return self.decoder(upsampled)
+
+
+PlainEncoderDecoder = CNNDownscaler
+EncoderDecoderBaseline = CNNDownscaler

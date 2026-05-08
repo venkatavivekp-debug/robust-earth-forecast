@@ -1,6 +1,6 @@
 # Results summary (archived experiment grid)
 
-All numeric RMSE values below are **copied from** `docs/experiments/final_comparison.json` (no recomputation). Persistence RMSE is the single baseline value stored there (`improvement_vs_persistence.persistence_rmse`). **CNN** is not listed in that JSON; qualitative outcome for CNN on the same grid is noted under the table.
+All numeric RMSE values below are **copied from** `docs/experiments/final_comparison.json` (no recomputation). Persistence RMSE is the single baseline value stored there (`improvement_vs_persistence.persistence_rmse`). The archived `cnn` rows are the plain encoder-decoder baseline and are not listed in that JSON; qualitative outcome for the same grid is noted under the table.
 
 | Model | Variables | History | RMSE | Beats persistence |
 | --- | --- | ---: | ---: | --- |
@@ -12,7 +12,7 @@ All numeric RMSE values below are **copied from** `docs/experiments/final_compar
 | ConvLSTM | t2m | 3 | 2.0036779940128326 | Yes |
 | ConvLSTM | t2m | 6 | 2.991683403650919 | No |
 
-**CNN (same `run_core_experiments.py` grid, not in this JSON):** exact CNN rows live in `results/experiments/summary.csv` when the sweep has been run locally. In the current local summary, CNN is worse than persistence for most small-data cells; `core4_h6` is the exception.
+**PlainEncoderDecoder (`cnn`, same `run_core_experiments.py` grid, not in this JSON):** exact rows live in `results/experiments/summary.csv` when the sweep has been run locally. In the current local summary, this baseline is worse than persistence for most small-data cells; `core4_h6` is the exception.
 
 **Readout**
 
