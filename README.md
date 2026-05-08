@@ -1,12 +1,19 @@
 # Robust Earth Forecast
 
-ERA5 -> PRISM daily temperature downscaling over Georgia. The repo trains small CNN and ConvLSTM baselines that map a short ERA5 history to the target-day PRISM `tmean` field, then checks them against persistence and simple interpolation baselines.
+ERA5 -> PRISM daily temperature downscaling over Georgia. The research question is whether a learned model can recover PRISM-scale spatial structure beyond upsampled ERA5 while staying comparable to persistence and interpolation baselines.
 
-This is a small regional experiment, not a global weather model. The useful part is the controlled ERA5/PRISM pipeline, the baseline comparison, and the result stability check.
+This repository is organized around the downscaling problem rather than model chasing: aligned data, controlled baselines, reproducible training/evaluation, and diagnostics for spatial reconstruction quality.
+
+## Current Research Status
+
+- The current reference learned model is a no-skip encoder-decoder baseline: `PlainEncoderDecoder` / `EncoderDecoderBaseline` (`cnn` alias kept for archived checkpoints and scripts).
+- The active focus is diagnosing spatial reconstruction limits: blur, border artifacts, residual structure, and split sensitivity.
+- The next controlled architecture comparison is persistence vs `PlainEncoderDecoder` vs a proper skip-connected U-Net under identical data, split, normalization, target mode, and diagnostics.
+- ConvLSTM results are retained as archived temporal evidence, but temporal modeling is intentionally secondary until the spatial baseline is understood.
 
 ## Result Snapshot
 
-| Dataset | Best config | Best RMSE | Persistence RMSE | Delta vs persistence |
+| Dataset | Best archived config | Best RMSE | Persistence RMSE | Delta vs persistence |
 | --- | --- | ---: | ---: | ---: |
 | small | ConvLSTM `core4_h3` | 1.5704300999641418 | 2.355815142393112 | -0.7853850424289703 |
 | medium | ConvLSTM `core4_h3` | 1.581842489540577 | 2.966560184955597 | -1.38471769541502 |
@@ -21,31 +28,57 @@ The medium run uses more days, but the best single-split RMSE is basically flat.
 
 Figures above are committed outputs from the `core4_h3` evaluation run. Full tables are in [`docs/experiments/results_summary.md`](docs/experiments/results_summary.md), [`docs/experiments/data_scaling.md`](docs/experiments/data_scaling.md), and the JSON summaries under `docs/experiments/`.
 
-## Short Readout
+## Main Observations
 
-- Persistence is a hard baseline: latest ERA5 `t2m`, upsampled, already carries much of the daily temperature field.
-- ConvLSTM is strongest in the archived CNN/ConvLSTM grid, but the exact winner still depends on split, input set, and history length.
-- Moderate temporal context works better than history 1; longer history is not automatically better.
+- Persistence is strong: latest ERA5 `t2m`, upsampled, already carries much of the daily temperature field.
+- ConvLSTM is strongest in the archived encoder-decoder/ConvLSTM grid, but the exact winner depends on split, input set, and history length.
 - More data improved stability more than peak RMSE.
-- Spatial error has structure, but PRISM gradient alone explains little of it (`r ~= 0.08` on mean maps, `~0.04` pooled).
+- Spatial error has structure; PRISM gradient alone explains little of it (`r ~= 0.08` on mean maps, `~0.04` pooled).
+- Border diagnostics confirmed that the plain encoder-decoder baseline is weak near regional edges.
 
 All results are reported with variability across splits rather than as a single clean run.
 
-### Spatial Baseline Check
+## Spatial Baseline Check
 
-The border diagnostic confirmed that the old plain CNN was weak. On the medium `core4_h3` validation split, a small residual U-Net reached **1.5001 RMSE** with **1.8015 border RMSE**, compared with **2.1599 RMSE** for CNN direct and **1.6705 RMSE** for ConvLSTM direct on the same diagnostic. Residual U-Net helped, but border error is still higher than center error.
+On the medium `core4_h3` validation split, the preliminary residual U-Net check reached **1.5001 RMSE** with **1.8015 border RMSE**, compared with **2.1599 RMSE** for the historical `cnn` direct run and **1.6705 RMSE** for ConvLSTM direct on the same diagnostic. Residual prediction helped, but border error is still higher than center error.
+
+This result motivates a cleaner controlled comparison rather than another sweep: the next step is to freeze the `PlainEncoderDecoder` baseline and compare it against a proper skip-connected U-Net with the same data, split, target mode, and diagnostic panel.
 
 Details: [`docs/experiments/underperformance_diagnosis.md`](docs/experiments/underperformance_diagnosis.md).
+
+## Repository Structure
+
+- `data_pipeline/`: ERA5 and PRISM download/validation entry points.
+- `datasets/`: ERA5/PRISM alignment and dataset path resolution.
+- `models/`: baseline architecture implementations.
+- `training/`: trainer CLI and checkpoint writing.
+- `evaluation/`: metrics, plots, and baseline evaluation.
+- `scripts/`: experiment orchestration, result validation, and spatial diagnostics.
+- `docs/experiments/`: committed metrics, comparisons, and diagnosis notes.
+- `docs/research/`: problem framing, comparison protocol, and failure-mode notes.
 
 ## Data and Models
 
 - **Predictors:** ERA5 over Georgia, mainly `t2m` and `core4` (`t2m`, `u10`, `v10`, `sp`).
 - **Target:** PRISM daily mean temperature (`tmean`).
 - **Histories:** 1, 3, and 6 days.
-- **Models:** CNN stacks history as channels; U-Net adds skip connections for the spatial check; ConvLSTM keeps the time axis explicit.
+- **Models:** `PlainEncoderDecoder` stacks history as channels; U-Net work is framed as the next controlled skip-connected spatial comparison; ConvLSTM keeps the time axis explicit for archived temporal runs.
 - **Baselines:** persistence, upsampled ERA5, and a linear baseline.
 
 Default small data is January 2023. Medium data is 2023-01-01 through 2023-03-31.
+
+## Diagnostics Philosophy
+
+RMSE is necessary but not enough. Spatial downscaling also needs:
+
+- prediction-vs-target panels;
+- absolute error maps;
+- border-vs-center error;
+- prediction variance and oversmoothing checks;
+- gradient/error analysis;
+- stability across seeds and splits.
+
+Changing architecture, target mode, split, and inputs at the same time makes conclusions hard to interpret. Future comparisons should isolate one change at a time.
 
 ## Reproduce
 
@@ -75,20 +108,22 @@ python3 scripts/validate_results.py --dataset-version medium
 python3 scripts/summarize_results.py --dataset-version medium
 ```
 
-Use `scripts/run_core_experiments.py` for current sweeps. `training/run_temporal_analysis.py` and `training/run_ablation.py` are older runners and do not match the current trainer CLI.
+Use `scripts/run_core_experiments.py` for archived encoder-decoder/ConvLSTM sweeps. `training/run_temporal_analysis.py` and `training/run_ablation.py` are older runners and do not match the current trainer CLI.
 
 ## Limitations
 
 - Short regional sample, especially in the default small run.
 - Georgia-only bbox; no transfer claim.
 - ERA5 and PRISM differ in grid, physics, and observation influence.
+- No static terrain field is used yet.
 - RMSE rankings are split-sensitive, so the stability tables matter.
-- Next useful step: rerun residual U-Net across seeds, then test real terrain/static fields if DEM data is added.
+- Existing U-Net result is a preliminary spatial check; the next step is the controlled skip-connected U-Net comparison defined in the research notes.
 
 ## Notes
 
 - Notebook companion: [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb)
-- Literature notes: [`docs/research/literature_notes.md`](docs/research/literature_notes.md)
-- Problem structure notes: [`docs/research/problem_structure_notes.md`](docs/research/problem_structure_notes.md)
-- Research gap: [`docs/research/research_gap.md`](docs/research/research_gap.md)
-- Next experiment plan: [`docs/research/next_experiment_plan.md`](docs/research/next_experiment_plan.md)
+- Repository philosophy: [`docs/research/repository_philosophy.md`](docs/research/repository_philosophy.md)
+- Baseline definition: [`docs/research/current_baseline_definition.md`](docs/research/current_baseline_definition.md)
+- Controlled comparison protocol: [`docs/research/controlled_comparison_protocol.md`](docs/research/controlled_comparison_protocol.md)
+- Failure mode catalog: [`docs/research/failure_mode_catalog.md`](docs/research/failure_mode_catalog.md)
+- Refactor plan: [`docs/research/final_repo_refactor_plan.md`](docs/research/final_repo_refactor_plan.md)
