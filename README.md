@@ -24,7 +24,7 @@ Figures above are committed outputs from the `core4_h3` evaluation run. Full tab
 ## Short Readout
 
 - Persistence is a hard baseline: latest ERA5 `t2m`, upsampled, already carries much of the daily temperature field.
-- ConvLSTM is the strongest model family in the archived runs, but the exact winner still depends on split, input set, and history length.
+- ConvLSTM is strongest in the archived CNN/ConvLSTM grid, but the exact winner still depends on split, input set, and history length.
 - Moderate temporal context works better than history 1; longer history is not automatically better.
 - More data improved stability more than peak RMSE.
 - Spatial error has structure, but PRISM gradient alone explains little of it (`r ~= 0.08` on mean maps, `~0.04` pooled).
@@ -42,7 +42,7 @@ Details: [`docs/experiments/underperformance_diagnosis.md`](docs/experiments/und
 - **Predictors:** ERA5 over Georgia, mainly `t2m` and `core4` (`t2m`, `u10`, `v10`, `sp`).
 - **Target:** PRISM daily mean temperature (`tmean`).
 - **Histories:** 1, 3, and 6 days.
-- **Models:** CNN stacks history as channels; ConvLSTM keeps the time axis explicit; U-Net is a small spatial baseline for the border-artifact check.
+- **Models:** CNN stacks history as channels; U-Net adds skip connections for the spatial check; ConvLSTM keeps the time axis explicit.
 - **Baselines:** persistence, upsampled ERA5, and a linear baseline.
 
 Default small data is January 2023. Medium data is 2023-01-01 through 2023-03-31.
@@ -89,5 +89,6 @@ Use `scripts/run_core_experiments.py` for current sweeps. `training/run_temporal
 
 - Notebook companion: [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb)
 - Literature notes: [`docs/research/literature_notes.md`](docs/research/literature_notes.md)
+- Problem structure notes: [`docs/research/problem_structure_notes.md`](docs/research/problem_structure_notes.md)
 - Research gap: [`docs/research/research_gap.md`](docs/research/research_gap.md)
 - Next experiment plan: [`docs/research/next_experiment_plan.md`](docs/research/next_experiment_plan.md)
