@@ -8,7 +8,7 @@ This repository is organized around the downscaling problem rather than model ch
 
 - The current reference learned model is a no-skip encoder-decoder baseline: `PlainEncoderDecoder` / `EncoderDecoderBaseline` (`cnn` alias kept for archived checkpoints and scripts).
 - The active focus is diagnosing spatial reconstruction limits: blur, border artifacts, residual structure, and split sensitivity.
-- The next controlled architecture comparison is persistence vs `PlainEncoderDecoder` vs a proper skip-connected U-Net under identical data, split, normalization, target mode, and diagnostics.
+- A controlled spatial benchmark now compares persistence, `PlainEncoderDecoder`, and a skip-connected U-Net under identical data, split, normalization, target mode, and diagnostics.
 - ConvLSTM results are retained as archived temporal evidence, but temporal modeling is intentionally secondary until the spatial baseline is understood.
 
 ## Result Snapshot
@@ -38,13 +38,23 @@ Figures above are committed outputs from the `core4_h3` evaluation run. Full tab
 
 All results are reported with variability across splits rather than as a single clean run.
 
-## Spatial Baseline Check
+## Controlled Spatial Benchmark
 
-On the medium `core4_h3` validation split, the preliminary residual U-Net check reached **1.5001 RMSE** with **1.8015 border RMSE**, compared with **2.1599 RMSE** for the historical `cnn` direct run and **1.6705 RMSE** for ConvLSTM direct on the same diagnostic. Residual prediction helped, but border error is still higher than center error.
+Medium `core4_h3`, direct target mode, seed 42, all 18 validation samples:
 
-This result motivates a cleaner controlled comparison rather than another sweep: the next step is to freeze the `PlainEncoderDecoder` baseline and compare it against a proper skip-connected U-Net with the same data, split, target mode, and diagnostic panel.
+| Model | RMSE | MAE | Border RMSE | Center RMSE |
+| --- | ---: | ---: | ---: | ---: |
+| persistence | 2.8467 | 1.9428 | 3.5826 | 2.5596 |
+| PlainEncoderDecoder | 2.2313 | 1.7827 | 2.5038 | 2.1344 |
+| U-Net | 1.8939 | 1.4901 | 2.1607 | 1.7978 |
 
-Details: [`docs/experiments/underperformance_diagnosis.md`](docs/experiments/underperformance_diagnosis.md).
+![Controlled spatial benchmark prediction panel](docs/images/spatial_benchmark_prediction_panel.png)
+
+![Controlled spatial benchmark error maps](docs/images/spatial_benchmark_error_maps.png)
+
+The skip-connected U-Net improves over the no-skip baseline on this split, but border error is still higher than center error. This supports U-Net as the next spatial baseline; it does not close the downscaling problem.
+
+Details: [`docs/experiments/spatial_benchmark.md`](docs/experiments/spatial_benchmark.md). Earlier residual and ConvLSTM diagnostics are kept in [`docs/experiments/underperformance_diagnosis.md`](docs/experiments/underperformance_diagnosis.md).
 
 ## Repository Structure
 
@@ -62,7 +72,7 @@ Details: [`docs/experiments/underperformance_diagnosis.md`](docs/experiments/und
 - **Predictors:** ERA5 over Georgia, mainly `t2m` and `core4` (`t2m`, `u10`, `v10`, `sp`).
 - **Target:** PRISM daily mean temperature (`tmean`).
 - **Histories:** 1, 3, and 6 days.
-- **Models:** `PlainEncoderDecoder` stacks history as channels; U-Net work is framed as the next controlled skip-connected spatial comparison; ConvLSTM keeps the time axis explicit for archived temporal runs.
+- **Models:** `PlainEncoderDecoder` stacks history as channels; U-Net is the skip-connected spatial baseline under controlled comparison; ConvLSTM keeps the time axis explicit for archived temporal runs.
 - **Baselines:** persistence, upsampled ERA5, and a linear baseline.
 
 Default small data is January 2023. Medium data is 2023-01-01 through 2023-03-31.
@@ -117,13 +127,14 @@ Use `scripts/run_core_experiments.py` for archived encoder-decoder/ConvLSTM swee
 - ERA5 and PRISM differ in grid, physics, and observation influence.
 - No static terrain field is used yet.
 - RMSE rankings are split-sensitive, so the stability tables matter.
-- Existing U-Net result is a preliminary spatial check; the next step is the controlled skip-connected U-Net comparison defined in the research notes.
+- The controlled U-Net result is one split only; multi-seed stability and terrain-aware diagnostics are still pending.
 
 ## Notes
 
 - Notebook companion: [`notebooks/analysis.ipynb`](notebooks/analysis.ipynb)
 - Repository philosophy: [`docs/research/repository_philosophy.md`](docs/research/repository_philosophy.md)
 - Baseline definition: [`docs/research/current_baseline_definition.md`](docs/research/current_baseline_definition.md)
+- Spatial benchmark protocol: [`docs/research/spatial_benchmark_protocol.md`](docs/research/spatial_benchmark_protocol.md)
 - Controlled comparison protocol: [`docs/research/controlled_comparison_protocol.md`](docs/research/controlled_comparison_protocol.md)
 - Failure mode catalog: [`docs/research/failure_mode_catalog.md`](docs/research/failure_mode_catalog.md)
 - Refactor plan: [`docs/research/final_repo_refactor_plan.md`](docs/research/final_repo_refactor_plan.md)
