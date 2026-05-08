@@ -53,3 +53,5 @@ Border degradation remains. Border RMSE improves slightly at 300 epochs, but the
 Undertraining is only weakly supported. There is a small validation improvement at 300 epochs, so the model was not fully saturated at 80 epochs. But the small magnitude of the gain, persistent blur indicators, and unchanged border ratio suggest that training budget is not the main cause of the remaining artifacts.
 
 The next phase should not be another large epoch sweep. The more useful next step is to keep the 300-epoch budget as a reference and test missing physical/context information, especially real terrain/topography, under the same controlled evaluation.
+
+Concise conclusion: longer training gave only mild improvement, so undertraining alone is not the dominant explanation. That points the next phase toward physically meaningful static spatial context, especially terrain, before adding temporal complexity.
