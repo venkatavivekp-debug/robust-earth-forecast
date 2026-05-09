@@ -18,7 +18,7 @@ The repository now centers on controlled spatial evidence:
 - Spatial sharpness diagnostics show U-Net lowers RMSE while still losing much of the PRISM-scale gradient/detail structure.
 - Temporal modeling and ConvLSTM are archived, not the next active direction.
 
-The next grounded phase is static spatial context, especially real topography/DEM-derived channels, under the same controlled U-Net evaluation.
+The current grounded phase is static spatial context: real DEM-derived terrain channels under the same controlled U-Net evaluation.
 
 ## Result Snapshot
 
@@ -51,6 +51,7 @@ Full write-ups:
 - [`docs/experiments/boundary_ablation_results.md`](docs/experiments/boundary_ablation_results.md)
 - [`docs/experiments/undertraining_diagnosis_results.md`](docs/experiments/undertraining_diagnosis_results.md)
 - [`docs/experiments/spatial_sharpness_diagnosis.md`](docs/experiments/spatial_sharpness_diagnosis.md)
+- [`docs/experiments/topography_context_results.md`](docs/experiments/topography_context_results.md)
 
 ## Research Progression
 
@@ -66,7 +67,9 @@ Professor Hu suggested topography after the blurred-output and boundary checks. 
 
 The sharpness diagnosis supports this direction: U-Net improves RMSE, but its gradient magnitude and local contrast remain well below PRISM. That points to missing fine-scale spatial information, not just an undertrained decoder.
 
-The topography phase is not implemented yet. The plan is to add real DEM-derived static covariates, likely from a public source such as USGS 3DEP/NED, and compare:
+The first controlled topography run uses a real USGS 3DEP Elevation ImageServer export aligned to the PRISM grid. On medium seed 42, U-Net `core4 + elevation` improved RMSE from **1.7995** to **1.5146**. The full topo set had slightly worse RMSE (**1.5886**) but the lowest border/center ratio among learned variants. This is supportive, not final; seed stability is still needed.
+
+The comparison is:
 
 1. persistence / upsampled ERA5;
 2. U-Net `core4_h3`;
@@ -78,7 +81,7 @@ Plan: [`docs/research/topography_context_plan.md`](docs/research/topography_cont
 
 ## Data and Models
 
-- **Predictors:** ERA5 over Georgia, mainly `t2m` and `core4` (`t2m`, `u10`, `v10`, `sp`).
+- **Predictors:** ERA5 over Georgia, mainly `t2m` and `core4` (`t2m`, `u10`, `v10`, `sp`), with optional DEM-derived `core4_elev` / `core4_topo` static context.
 - **Target:** PRISM daily mean temperature (`tmean`).
 - **Histories:** 1, 3, and 6 days in archived grids; current spatial work uses `core4_h3`.
 - **Baselines:** persistence, upsampled ERA5, linear baseline, `PlainEncoderDecoder`, U-Net.
@@ -133,6 +136,9 @@ python3 scripts/run_spatial_benchmark.py --dataset-version medium --input-set co
 python3 scripts/run_boundary_ablation.py --dataset-version medium --input-set core4 --history-length 3
 python3 scripts/run_undertraining_diagnosis.py --dataset-version medium --input-set core4 --history-length 3
 python3 scripts/diagnose_spatial_sharpness.py --dataset-version medium --input-set core4 --history-length 3
+python3 scripts/download_dem_data.py --bbox=-85,30,-80,35 --source usgs_3dep_image_service
+python3 scripts/prepare_topography_context.py --dem-path data_raw/static/source_dem/<dem>.tif --dataset-version medium
+python3 scripts/run_topography_experiment.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc
 ```
 
 ## Limitations
