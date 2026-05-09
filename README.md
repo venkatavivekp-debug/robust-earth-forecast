@@ -52,6 +52,7 @@ Full write-ups:
 - [`docs/experiments/undertraining_diagnosis_results.md`](docs/experiments/undertraining_diagnosis_results.md)
 - [`docs/experiments/spatial_sharpness_diagnosis.md`](docs/experiments/spatial_sharpness_diagnosis.md)
 - [`docs/experiments/topography_context_results.md`](docs/experiments/topography_context_results.md)
+- [`docs/experiments/topography_seed_stability.md`](docs/experiments/topography_seed_stability.md)
 
 ## Research Progression
 
@@ -67,7 +68,9 @@ Professor Hu suggested topography after the blurred-output and boundary checks. 
 
 The sharpness diagnosis supports this direction: U-Net improves RMSE, but its gradient magnitude and local contrast remain well below PRISM. That points to missing fine-scale spatial information, not just an undertrained decoder.
 
-The first controlled topography run uses a real USGS 3DEP Elevation ImageServer export aligned to the PRISM grid. On medium seed 42, U-Net `core4 + elevation` improved RMSE from **1.7995** to **1.5146**. The full topo set had slightly worse RMSE (**1.5886**) but the lowest border/center ratio among learned variants. This is supportive, not final; seed stability is still needed.
+The first controlled topography run uses a real USGS 3DEP Elevation ImageServer export aligned to the PRISM grid. On medium seed 42, U-Net `core4 + elevation` improved RMSE from **1.7995** to **1.5146**. Across seeds 42, 7, and 123, both terrain variants beat the no-topography U-Net; full topo had the lowest mean RMSE (**1.4481 +/- 0.1428**). High-frequency detail is still weak, so the result supports terrain context without solving blur.
+
+A seed-42 residual topo check improved RMSE from **1.5886** to **1.3791** and recovered more gradient/detail signal, but it also kept border degradation. That should be repeated across seeds before it becomes the next main result.
 
 The comparison is:
 
@@ -139,6 +142,7 @@ python3 scripts/diagnose_spatial_sharpness.py --dataset-version medium --input-s
 python3 scripts/download_dem_data.py --bbox=-85,30,-80,35 --source usgs_3dep_image_service
 python3 scripts/prepare_topography_context.py --dem-path data_raw/static/source_dem/<dem>.tif --dataset-version medium
 python3 scripts/run_topography_experiment.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc
+python3 scripts/run_topography_seed_stability.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc --seeds 42 7 123
 ```
 
 ## Limitations
@@ -146,9 +150,10 @@ python3 scripts/run_topography_experiment.py --dataset-version medium --static-c
 - Short regional sample, especially in the default small run.
 - Georgia-only bounding box; no transfer claim.
 - PRISM and ERA5 differ in grid, observation influence, and physical representation.
-- No static terrain field is used yet.
-- U-Net improves reconstruction but remains smooth.
+- DEM-derived terrain context is Georgia-only and still early.
+- U-Net improves reconstruction but remains smooth, especially in high-frequency detail.
 - Boundary behavior remains unresolved.
+- Direct/residual topography has only been checked on seed 42.
 - RMSE rankings are split-sensitive; seed tables matter.
 
 ## Notes
