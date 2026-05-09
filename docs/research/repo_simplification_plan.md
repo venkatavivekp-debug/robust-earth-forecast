@@ -32,6 +32,8 @@ This is a conservative audit after the spatial benchmark, boundary ablation, and
 
 Removed in this pass: ignored local scratch folders `results/_tmp_training`, `results/tmp_training`, and `results/tmp_eval`.
 
+Current audit, 2026-05-09: no `.DS_Store`, notebook checkpoint, tracked raw-data, tracked checkpoint, or tracked `results/` artifacts were found. No real DEM/topography raster was found in the tracked tree or local ignored data folders, so the topography phase should remain at data preparation until a real source DEM is added locally.
+
 ## Do not touch
 
 - `data_raw/`, `checkpoints/`, and validated `results/` folders unless explicitly archiving local data outside git.
