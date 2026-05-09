@@ -523,6 +523,33 @@ def save_gradient_plot(
     plt.close(fig)
 
 
+def save_detail_maps(
+    predictions: Dict[str, np.ndarray],
+    target: np.ndarray,
+    high_pass_window: int,
+    output_path: Path,
+    variants: Sequence[Tuple[str, str, Optional[str]]],
+) -> None:
+    _configure_plot_cache()
+    import matplotlib.pyplot as plt
+
+    labels = ["target", "persistence", *[name for name, _, _ in variants]]
+    arrays = [target, predictions["persistence"], *[predictions[name] for name, _, _ in variants]]
+    details = [high_pass(arr, high_pass_window) for arr in arrays]
+    vmax = float(max(np.percentile(np.abs(arr), 99) for arr in details))
+    fig, axes = plt.subplots(1, len(labels), figsize=(4 * len(labels), 4), constrained_layout=True)
+    im = None
+    for ax, label, arr in zip(axes, labels, details):
+        im = ax.imshow(arr, cmap="coolwarm", vmin=-vmax, vmax=vmax)
+        ax.set_title(label)
+        ax.axis("off")
+    fig.colorbar(im, ax=axes, shrink=0.85, label="high-pass deg C")
+    fig.suptitle("High-frequency detail comparison")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+
+
 def save_local_patch(
     predictions: Dict[str, np.ndarray],
     target: np.ndarray,
@@ -638,6 +665,13 @@ def main() -> None:
     save_prediction_panel(predictions_for_plot, era5_for_plot, target_for_plot, output_dir / "prediction_panel.png", variants)
     save_error_maps(predictions_for_plot, target_for_plot, output_dir / "absolute_error_maps.png", variants)
     save_gradient_plot(predictions_for_plot, target_for_plot, output_dir / "gradient_comparison.png", variants)
+    save_detail_maps(
+        predictions_for_plot,
+        target_for_plot,
+        int(args.high_pass_window),
+        output_dir / "high_frequency_detail_maps.png",
+        variants,
+    )
     save_local_patch(predictions_for_plot, target_for_plot, int(args.patch_size), output_dir / "local_patch_comparison.png", variants)
 
     print("controlled topography context comparison")
