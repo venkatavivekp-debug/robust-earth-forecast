@@ -21,6 +21,7 @@ VARIANTS = (
     ("unet_core4_elev_h3", "core4_elev", "elevation"),
     ("unet_core4_topo_h3", "core4_topo", "elevation+slope+aspect+terrain_gradient_magnitude"),
 )
+VARIANT_MAP = {name: (name, input_set, features) for name, input_set, features in VARIANTS}
 
 
 def _configure_plot_cache() -> None:
@@ -59,6 +60,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--high-pass-window", type=int, default=7)
     parser.add_argument("--local-window", type=int, default=7)
     parser.add_argument("--patch-size", type=int, default=32)
+    parser.add_argument(
+        "--variants",
+        nargs="+",
+        choices=tuple(VARIANT_MAP),
+        default=[name for name, _, _ in VARIANTS],
+        help="Subset of topography variants to run.",
+    )
     parser.add_argument("--skip-training", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
@@ -82,7 +90,15 @@ def run_cmd(cmd: Sequence[str]) -> None:
         print("\n".join(lines[-6:]))
 
 
-def train_variants(args: argparse.Namespace, output_dir: Path) -> Dict[str, Path]:
+def selected_variants(args: argparse.Namespace) -> Tuple[Tuple[str, str, Optional[str]], ...]:
+    return tuple(VARIANT_MAP[name] for name in args.variants)
+
+
+def train_variants(
+    args: argparse.Namespace,
+    output_dir: Path,
+    variants: Sequence[Tuple[str, str, Optional[str]]],
+) -> Dict[str, Path]:
     checkpoint_dir = output_dir / "checkpoints"
     log_dir = output_dir / "training_logs"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -94,7 +110,7 @@ def train_variants(args: argparse.Namespace, output_dir: Path) -> Dict[str, Path
     if not static_path.exists():
         raise FileNotFoundError(f"Static covariate file not found: {static_path}")
 
-    for variant_name, input_set, _features in VARIANTS:
+    for variant_name, input_set, _features in variants:
         checkpoint = checkpoint_dir / f"{variant_name}_best.pt"
         checkpoints[variant_name] = checkpoint
         if args.skip_training and checkpoint.exists():
@@ -429,12 +445,18 @@ def save_summary(rows: Sequence[Dict[str, Any]], output_dir: Path) -> None:
     (output_dir / "summary.json").write_text(json.dumps(list(rows), indent=2) + "\n")
 
 
-def save_prediction_panel(predictions: Dict[str, np.ndarray], era5: np.ndarray, target: np.ndarray, output_path: Path) -> None:
+def save_prediction_panel(
+    predictions: Dict[str, np.ndarray],
+    era5: np.ndarray,
+    target: np.ndarray,
+    output_path: Path,
+    variants: Sequence[Tuple[str, str, Optional[str]]],
+) -> None:
     _configure_plot_cache()
     import matplotlib.pyplot as plt
 
-    labels = ["ERA5 upsampled", "persistence", *[name for name, _, _ in VARIANTS], "PRISM target"]
-    arrays = [era5, predictions["persistence"], *[predictions[name] for name, _, _ in VARIANTS], target]
+    labels = ["ERA5 upsampled", "persistence", *[name for name, _, _ in variants], "PRISM target"]
+    arrays = [era5, predictions["persistence"], *[predictions[name] for name, _, _ in variants], target]
     vmin = float(min(np.min(arr) for arr in arrays))
     vmax = float(max(np.max(arr) for arr in arrays))
     fig, axes = plt.subplots(1, len(arrays), figsize=(4 * len(arrays), 4), constrained_layout=True)
@@ -450,11 +472,16 @@ def save_prediction_panel(predictions: Dict[str, np.ndarray], era5: np.ndarray, 
     plt.close(fig)
 
 
-def save_error_maps(predictions: Dict[str, np.ndarray], target: np.ndarray, output_path: Path) -> None:
+def save_error_maps(
+    predictions: Dict[str, np.ndarray],
+    target: np.ndarray,
+    output_path: Path,
+    variants: Sequence[Tuple[str, str, Optional[str]]],
+) -> None:
     _configure_plot_cache()
     import matplotlib.pyplot as plt
 
-    labels = ["persistence", *[name for name, _, _ in VARIANTS]]
+    labels = ["persistence", *[name for name, _, _ in variants]]
     errors = [np.abs(predictions[label] - target) for label in labels]
     vmax = float(max(np.max(err) for err in errors))
     fig, axes = plt.subplots(1, len(labels), figsize=(4 * len(labels), 4), constrained_layout=True)
@@ -470,12 +497,17 @@ def save_error_maps(predictions: Dict[str, np.ndarray], target: np.ndarray, outp
     plt.close(fig)
 
 
-def save_gradient_plot(predictions: Dict[str, np.ndarray], target: np.ndarray, output_path: Path) -> None:
+def save_gradient_plot(
+    predictions: Dict[str, np.ndarray],
+    target: np.ndarray,
+    output_path: Path,
+    variants: Sequence[Tuple[str, str, Optional[str]]],
+) -> None:
     _configure_plot_cache()
     import matplotlib.pyplot as plt
 
-    labels = ["target", "persistence", *[name for name, _, _ in VARIANTS]]
-    arrays = [target, predictions["persistence"], *[predictions[name] for name, _, _ in VARIANTS]]
+    labels = ["target", "persistence", *[name for name, _, _ in variants]]
+    arrays = [target, predictions["persistence"], *[predictions[name] for name, _, _ in variants]]
     maps = [gradient_magnitude(arr) for arr in arrays]
     vmax = float(max(np.percentile(arr, 99) for arr in maps))
     fig, axes = plt.subplots(1, len(labels), figsize=(4 * len(labels), 4), constrained_layout=True)
@@ -491,7 +523,13 @@ def save_gradient_plot(predictions: Dict[str, np.ndarray], target: np.ndarray, o
     plt.close(fig)
 
 
-def save_local_patch(predictions: Dict[str, np.ndarray], target: np.ndarray, patch_size: int, output_path: Path) -> None:
+def save_local_patch(
+    predictions: Dict[str, np.ndarray],
+    target: np.ndarray,
+    patch_size: int,
+    output_path: Path,
+    variants: Sequence[Tuple[str, str, Optional[str]]],
+) -> None:
     _configure_plot_cache()
     import matplotlib.pyplot as plt
 
@@ -506,8 +544,8 @@ def save_local_patch(predictions: Dict[str, np.ndarray], target: np.ndarray, pat
     ys = slice(y - pad, y - pad + patch_size)
     xs = slice(x - pad, x - pad + patch_size)
 
-    labels = ["target", "persistence", *[name for name, _, _ in VARIANTS]]
-    arrays = [target[ys, xs], predictions["persistence"][ys, xs], *[predictions[name][ys, xs] for name, _, _ in VARIANTS]]
+    labels = ["target", "persistence", *[name for name, _, _ in variants]]
+    arrays = [target[ys, xs], predictions["persistence"][ys, xs], *[predictions[name][ys, xs] for name, _, _ in variants]]
     vmin = float(min(np.min(arr) for arr in arrays))
     vmax = float(max(np.max(arr) for arr in arrays))
     fig, axes = plt.subplots(2, len(labels), figsize=(4 * len(labels), 7), constrained_layout=True)
@@ -545,14 +583,15 @@ def main() -> None:
     from datasets.dataset_paths import apply_dataset_version_to_args
 
     apply_dataset_version_to_args(args)
+    variants = selected_variants(args)
     config = vars(args).copy()
-    config["variants"] = [
+    config["variant_details"] = [
         {"name": name, "input_set": input_set, "features": features}
-        for name, input_set, features in VARIANTS
+        for name, input_set, features in variants
     ]
     (output_dir / "topography_experiment_config.json").write_text(json.dumps(config, indent=2) + "\n")
 
-    checkpoints = train_variants(args, output_dir)
+    checkpoints = train_variants(args, output_dir, variants)
     rows: List[Dict[str, Any]] = []
     predictions_for_plot: Dict[str, np.ndarray] = {}
     target_for_plot: Optional[np.ndarray] = None
@@ -562,7 +601,7 @@ def main() -> None:
     base_val_indices: Optional[List[int]] = None
     base_dates: Optional[List[str]] = None
 
-    for variant_name, input_set, _features in VARIANTS:
+    for variant_name, input_set, _features in variants:
         metrics, pred_cube, target_cube, era5_cube, val_indices, dates = evaluate_variant(
             args=args,
             variant_name=variant_name,
@@ -596,10 +635,10 @@ def main() -> None:
 
     save_summary(rows, output_dir)
     assert target_for_plot is not None and era5_for_plot is not None
-    save_prediction_panel(predictions_for_plot, era5_for_plot, target_for_plot, output_dir / "prediction_panel.png")
-    save_error_maps(predictions_for_plot, target_for_plot, output_dir / "absolute_error_maps.png")
-    save_gradient_plot(predictions_for_plot, target_for_plot, output_dir / "gradient_comparison.png")
-    save_local_patch(predictions_for_plot, target_for_plot, int(args.patch_size), output_dir / "local_patch_comparison.png")
+    save_prediction_panel(predictions_for_plot, era5_for_plot, target_for_plot, output_dir / "prediction_panel.png", variants)
+    save_error_maps(predictions_for_plot, target_for_plot, output_dir / "absolute_error_maps.png", variants)
+    save_gradient_plot(predictions_for_plot, target_for_plot, output_dir / "gradient_comparison.png", variants)
+    save_local_patch(predictions_for_plot, target_for_plot, int(args.patch_size), output_dir / "local_patch_comparison.png", variants)
 
     print("controlled topography context comparison")
     for row in rows:
