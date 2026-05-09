@@ -16,22 +16,24 @@ This matches the current evidence:
 
 ## Current data state
 
-No real DEM/topography file is currently present in the repository or local ignored data folders. Do not create synthetic terrain or placeholder channels. The next step is to place a real DEM raster locally, document the source, and run the preparation script before any dataset or model change.
+The first reproducible DEM workflow uses the USGS 3DEP Elevation ImageServer. The local source raster is downloaded over the ERA5/PRISM Georgia bbox (`-85,30,-80,35`) as a real DEM export, then aligned to the PRISM grid clipped to ERA5 bounds. The raw and processed files remain ignored by git.
 
-Expected local source path:
-
-```text
-data_raw/static/source_dem/<source_dem_file>.tif
-```
-
-Expected processed output path:
+Local source path:
 
 ```text
-data_raw/static/topography/georgia_prism_topography.nc
-data_raw/static/topography/georgia_prism_topography.metadata.json
+data_raw/static/source_dem/usgs_3dep_georgia_*.tif
 ```
 
-These paths are under `data_raw/` and should remain ignored by git.
+Processed output path:
+
+```text
+data_processed/static/georgia_prism_topography.nc
+data_processed/static/georgia_prism_topography.metadata.json
+```
+
+The prepared grid is `121 x 121`, matching the current clipped PRISM target grid. The source export is `1200 x 1200` over the Georgia bbox and is resampled to PRISM support during preparation.
+
+For model input, the dataset loader currently resamples these static fields onto the ERA5 grid and appends them as extra channels. This keeps the architecture unchanged for the first controlled test. A later full-resolution terrain-conditioning design would be a separate architecture/input-convention change.
 
 ## Why before temporal modeling
 
@@ -41,7 +43,13 @@ This is also closer to the GAIM direction: geospatial AI with Earth data, remote
 
 ## Candidate data
 
-Do not add topography until a real source is selected and documented. Reasonable candidates:
+The current source is:
+
+- [USGS 3DEP / The National Map](https://www.usgs.gov/tools/download-data-maps-national-map) Elevation ImageServer export;
+- EPSG:4326 bbox request over the ERA5/PRISM Georgia domain;
+- GeoTIFF output, then PRISM-grid NetCDF static covariates.
+
+Other reasonable candidates for later comparison:
 
 - USGS 3DEP / National Elevation Dataset DEM;
 - other public DEM products with reproducible download and citation;
@@ -54,18 +62,26 @@ All static fields must be reprojected/aligned to the PRISM target grid and norma
 The preparation script is intentionally source-file driven:
 
 ```bash
+python3 scripts/download_dem_data.py \
+  --output-dir data_raw/static/source_dem \
+  --bbox=-85,30,-80,35 \
+  --source usgs_3dep_image_service \
+  --size 1200,1200
+
 python3 scripts/prepare_topography_context.py \
-  --dem-path data_raw/static/source_dem/<source_dem_file>.tif \
+  --dem-path data_raw/static/source_dem/<downloaded_dem>.tif \
   --dataset-version medium \
-  --source-name "USGS 3DEP/NED or selected DEM source"
+  --output data_processed/static/georgia_prism_topography.nc \
+  --source-name "USGS 3DEP Elevation ImageServer"
 ```
 
 It should:
 
 - load a real DEM raster with CRS metadata;
 - use an existing PRISM raster as the target grid;
-- reproject/resample the DEM to the PRISM grid;
-- write elevation, slope, aspect, and terrain-gradient channels;
+- clip the PRISM reference grid to ERA5 bounds;
+- reproject/resample the DEM to that clipped PRISM grid;
+- write elevation, slope, aspect, and terrain-gradient-magnitude channels;
 - write metadata with source name, grid shape, CRS, resolution, and feature statistics.
 
 The processed channels are raw static fields. Model training should still learn normalization from the training split only.
@@ -114,4 +130,4 @@ Topography should be considered unhelpful or inconclusive if:
 
 ## Next implementation step
 
-Add a small, reproducible static-covariate data path for DEM-derived channels, then run one controlled U-Net comparison against the current no-topography reference. Do not add residual mode, ConvLSTM, attention, or new loss functions in the same experiment.
+The first seed-42 comparison has been run. The next step is not a new architecture: repeat the same topography comparison across the existing seed set and add error-by-elevation/slope diagnostics. Do not add residual mode, ConvLSTM, attention, or new loss functions in the same experiment.

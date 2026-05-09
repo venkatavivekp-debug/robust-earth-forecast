@@ -1,5 +1,6 @@
 # Data
 data_raw/
+data_processed/
 *.nc
 
 # Results (DO NOT TRACK)
