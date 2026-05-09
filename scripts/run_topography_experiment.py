@@ -45,7 +45,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--loss-mode", choices=["mse", "mse_l1", "mse_grad", "mse_l1_grad"], default="mse_l1")
     parser.add_argument("--l1-weight", type=float, default=0.1)
+    parser.add_argument("--grad-weight", type=float, default=0.05)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--scheduler", choices=["none", "plateau", "cosine"], default="plateau")
     parser.add_argument("--scheduler-patience", type=int, default=5)
@@ -137,8 +139,12 @@ def train_variants(
             str(args.learning_rate),
             "--weight-decay",
             str(args.weight_decay),
+            "--loss-mode",
+            str(args.loss_mode),
             "--l1-weight",
             str(args.l1_weight),
+            "--grad-weight",
+            str(args.grad_weight),
             "--grad-clip",
             str(args.grad_clip),
             "--scheduler",
@@ -168,7 +174,7 @@ def train_variants(
             "--training-results-dir",
             str(log_dir),
             "--run-name",
-            f"{variant_name}_{args.target_mode}",
+            f"{variant_name}_{args.target_mode}_{args.loss_mode}",
         ]
         if input_set != "core4":
             cmd.extend(["--static-covariate-path", str(static_path)])
@@ -363,6 +369,7 @@ def evaluate_variant(
         "input_set": input_set,
         "history_length": int(args.history_length),
         "target_mode": args.target_mode,
+        "loss_mode": args.loss_mode,
         "padding": "replicate",
         "upsampling": "bilinear",
         "split_seed": int(args.split_seed),
@@ -419,6 +426,7 @@ def save_summary(rows: Sequence[Dict[str, Any]], output_dir: Path) -> None:
     fields = [
         "model",
         "input_set",
+        "loss_mode",
         "rmse",
         "mae",
         "bias",

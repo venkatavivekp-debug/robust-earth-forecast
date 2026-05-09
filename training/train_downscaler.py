@@ -75,7 +75,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-5)
+    parser.add_argument(
+        "--loss-mode",
+        type=str,
+        choices=["mse", "mse_l1", "mse_grad", "mse_l1_grad"],
+        default="mse_l1",
+        help="Training objective. Default preserves the existing MSE + small L1 setup.",
+    )
     parser.add_argument("--l1-weight", type=float, default=0.1)
+    parser.add_argument("--grad-weight", type=float, default=0.05)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--scheduler", type=str, choices=["none", "plateau", "cosine"], default="plateau")
     parser.add_argument("--scheduler-patience", type=int, default=5)
@@ -314,11 +322,41 @@ def residual_base(x: torch.Tensor, target_size: Tuple[int, int]) -> torch.Tensor
     return F.interpolate(latest, size=target_size, mode="bilinear", align_corners=False)
 
 
+def spatial_gradient_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    if pred.shape != target.shape:
+        raise RuntimeError(f"Gradient loss shape mismatch: pred={tuple(pred.shape)} target={tuple(target.shape)}")
+    pred_dy = pred[..., 1:, :] - pred[..., :-1, :]
+    target_dy = target[..., 1:, :] - target[..., :-1, :]
+    pred_dx = pred[..., :, 1:] - pred[..., :, :-1]
+    target_dx = target[..., :, 1:] - target[..., :, :-1]
+    return F.l1_loss(pred_dy, target_dy) + F.l1_loss(pred_dx, target_dx)
+
+
+def compute_training_loss(
+    *,
+    raw_preds: torch.Tensor,
+    loss_target: torch.Tensor,
+    final_preds: torch.Tensor,
+    y: torch.Tensor,
+    loss_mode: str,
+    l1_weight: float,
+    grad_weight: float,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    mse_loss = F.mse_loss(raw_preds, loss_target)
+    loss = mse_loss
+    if loss_mode in {"mse_l1", "mse_l1_grad"} and l1_weight > 0.0:
+        loss = loss + float(l1_weight) * F.l1_loss(raw_preds, loss_target)
+    if loss_mode in {"mse_grad", "mse_l1_grad"} and grad_weight > 0.0:
+        loss = loss + float(grad_weight) * spatial_gradient_loss(final_preds, y)
+    return loss, mse_loss
+
+
 def run_epoch(
     model: Any,
     loader: Any,
-    criterion: Any,
+    loss_mode: str,
     l1_weight: float,
+    grad_weight: float,
     optimizer: Any,
     device: Any,
     train: bool,
@@ -362,12 +400,15 @@ def run_epoch(
                 loss_target = y
                 final_preds = raw_preds
 
-            mse_loss = criterion(raw_preds, loss_target)
-            if l1_weight > 0.0:
-                l1_loss = F.l1_loss(raw_preds, loss_target)
-                loss = mse_loss + float(l1_weight) * l1_loss
-            else:
-                loss = mse_loss
+            loss, _mse_loss = compute_training_loss(
+                raw_preds=raw_preds,
+                loss_target=loss_target,
+                final_preds=final_preds,
+                y=y,
+                loss_mode=loss_mode,
+                l1_weight=l1_weight,
+                grad_weight=grad_weight,
+            )
             if not bool(torch.isfinite(loss).item()):
                 raise RuntimeError("Non-finite loss encountered during training")
 
@@ -556,8 +597,6 @@ def main() -> None:
     else:
         scheduler = None
 
-    criterion = nn.MSELoss()
-
     best_val_loss = float("inf")
     best_epoch = 0
     curve_rows: List[dict] = []
@@ -567,8 +606,9 @@ def main() -> None:
         train_loss, train_rmse, train_grad_norm_mean, train_grad_norm_max = run_epoch(
             model,
             train_loader,
-            criterion,
+            args.loss_mode,
             args.l1_weight,
+            args.grad_weight,
             optimizer,
             device,
             train=True,
@@ -580,8 +620,9 @@ def main() -> None:
         val_loss, val_rmse, _, _ = run_epoch(
             model,
             val_loader,
-            criterion,
+            args.loss_mode,
             args.l1_weight,
+            args.grad_weight,
             optimizer,
             device,
             train=False,
@@ -612,6 +653,7 @@ def main() -> None:
                     "best_val_loss": best_val_loss,
                     "history_length": int(args.history_length),
                     "target_mode": args.target_mode,
+                    "loss_mode": args.loss_mode,
                     "train_indices": train_indices,
                     "val_indices": val_indices,
                     "input_norm": {
@@ -663,12 +705,14 @@ def main() -> None:
             "input_set": args.input_set,
             "history_length": int(args.history_length),
             "target_mode": args.target_mode,
+            "loss_mode": args.loss_mode,
             "best_epoch": int(best_epoch),
             "best_val_loss": float(best_val_loss),
             "epochs": int(args.epochs),
             "learning_rate": float(args.learning_rate),
             "weight_decay": float(args.weight_decay),
             "l1_weight": float(args.l1_weight),
+            "grad_weight": float(args.grad_weight),
             "grad_clip": float(args.grad_clip),
             "scheduler": args.scheduler,
             "split_seed": int(args.split_seed),
