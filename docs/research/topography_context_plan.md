@@ -132,4 +132,4 @@ Topography should be considered unhelpful or inconclusive if:
 
 The direct topography comparison has now been repeated across seeds 42, 7, and 123. Terrain context improves RMSE and spatial ratios on average, but high-frequency detail remains weak and border degradation remains.
 
-The next step is still not a new architecture. Repeat the residual-topography check across seeds, then add error-by-elevation/slope diagnostics. Do not add ConvLSTM, attention, or new loss functions in the same experiment.
+Residual topography has also been checked across the same seeds. It improves mean RMSE and sharpness diagnostics, but not enough to resolve fine-scale detail loss. The next step is error-by-elevation/slope diagnostics. Do not add ConvLSTM, attention, or new loss functions in the same experiment.

@@ -59,4 +59,4 @@ Residual topography improves seed-42 RMSE, MAE, correlation, gradient ratio, hig
 
 The terrain result is stable enough to keep static spatial context as the next active direction. The remaining blur is not well explained by undertraining alone: longer training gave only mild improvement, while terrain channels and residual formulation change the spatial diagnostics more directly.
 
-The next clean step is a multi-seed residual-topography comparison with the same diagnostics, followed by terrain-bin error analysis. Temporal modeling should still wait.
+The multi-seed residual-topography comparison is now summarized in [`topography_residual_stability.md`](topography_residual_stability.md). Temporal modeling should still wait.
