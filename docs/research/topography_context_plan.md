@@ -128,6 +128,8 @@ Topography should be considered unhelpful or inconclusive if:
 - seed behavior becomes less stable;
 - improvement appears only on one split and not in maps.
 
-## Next implementation step
+## Current next step
 
-The first seed-42 comparison has been run. The next step is not a new architecture: repeat the same topography comparison across the existing seed set and add error-by-elevation/slope diagnostics. Do not add residual mode, ConvLSTM, attention, or new loss functions in the same experiment.
+The direct topography comparison has now been repeated across seeds 42, 7, and 123. Terrain context improves RMSE and spatial ratios on average, but high-frequency detail remains weak and border degradation remains.
+
+The next step is still not a new architecture. Repeat the residual-topography check across seeds, then add error-by-elevation/slope diagnostics. Do not add ConvLSTM, attention, or new loss functions in the same experiment.

@@ -67,4 +67,4 @@ Terrain-sensitive regions look more plausible in the saved panels, but this has 
 
 This run supports Professor Hu's suggestion that topography is a useful next input. It improves RMSE and several spatial diagnostics under a controlled setup, without adding temporal complexity or changing the U-Net architecture.
 
-It is not enough to claim the issue is solved. The next check should repeat the topography comparison across seeds and inspect error by elevation, slope, and terrain-gradient bins.
+It is not enough to claim the issue is solved. The seed-stability check has now been run in [`topography_seed_stability.md`](topography_seed_stability.md); the next diagnostic should inspect error by elevation, slope, and terrain-gradient bins.
