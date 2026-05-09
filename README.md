@@ -54,6 +54,7 @@ Full write-ups:
 - [`docs/experiments/topography_context_results.md`](docs/experiments/topography_context_results.md)
 - [`docs/experiments/topography_seed_stability.md`](docs/experiments/topography_seed_stability.md)
 - [`docs/experiments/topography_residual_stability.md`](docs/experiments/topography_residual_stability.md)
+- [`docs/experiments/detail_preserving_loss_results.md`](docs/experiments/detail_preserving_loss_results.md)
 
 ## Research Progression
 
@@ -74,6 +75,8 @@ The first controlled topography run uses a real USGS 3DEP Elevation ImageServer 
 A seed-42 residual topo check improved RMSE from **1.5886** to **1.3791** and recovered more gradient/detail signal, but it also kept border degradation. That should be repeated across seeds before it becomes the next main result.
 
 That repeat is now done. Across seeds 42, 7, and 123, residual topo improves mean RMSE from **1.4481 +/- 0.1428** to **1.3858 +/- 0.0564**, raises gradient ratio from **0.3509** to **0.5665**, and raises high-frequency ratio from **0.0005** to **0.0302**. Seed 7 is a small RMSE regression, and border/center ratio remains above 1.0.
+
+A detail-preserving loss check tested MSE, MSE+L1, MSE+gradient, and MSE+L1+gradient for the same residual topo setup. Gradient terms slightly improved detail ratios, but the previous MSE+L1 objective still had the best mean RMSE (**1.3858 +/- 0.0564**). The objective is not changed by default.
 
 The comparison is:
 
@@ -147,6 +150,7 @@ python3 scripts/prepare_topography_context.py --dem-path data_raw/static/source_
 python3 scripts/run_topography_experiment.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc
 python3 scripts/run_topography_seed_stability.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc --seeds 42 7 123
 python3 scripts/run_topography_residual_stability.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc --seeds 42 7 123
+python3 scripts/run_detail_preserving_loss.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc --seeds 42 7 123
 ```
 
 ## Limitations
@@ -158,6 +162,7 @@ python3 scripts/run_topography_residual_stability.py --dataset-version medium --
 - U-Net improves reconstruction but remains smooth, especially in high-frequency detail.
 - Boundary behavior remains unresolved.
 - Residual topography improves mean metrics but still loses most fine-scale PRISM detail.
+- Gradient-aware loss gives only a small detail signal and is not the new default.
 - RMSE rankings are split-sensitive; seed tables matter.
 
 ## Notes
@@ -166,6 +171,7 @@ python3 scripts/run_topography_residual_stability.py --dataset-version medium --
 - Repository philosophy: [`docs/research/repository_philosophy.md`](docs/research/repository_philosophy.md)
 - Simplification plan: [`docs/research/repo_simplification_plan.md`](docs/research/repo_simplification_plan.md)
 - Next phase reasoning: [`docs/research/next_phase_reasoning.md`](docs/research/next_phase_reasoning.md)
+- Detail-loss reasoning: [`docs/research/detail_preserving_loss_reasoning.md`](docs/research/detail_preserving_loss_reasoning.md)
 - Topography plan: [`docs/research/topography_context_plan.md`](docs/research/topography_context_plan.md)
 - Spatial benchmark protocol: [`docs/research/spatial_benchmark_protocol.md`](docs/research/spatial_benchmark_protocol.md)
 - Failure mode catalog: [`docs/research/failure_mode_catalog.md`](docs/research/failure_mode_catalog.md)
