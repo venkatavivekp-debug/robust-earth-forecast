@@ -51,7 +51,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="PRISM directory path (default: from --dataset-version)",
     )
-    parser.add_argument("--input-set", type=str, choices=["t2m", "core4", "extended"], default="extended")
+    parser.add_argument(
+        "--input-set",
+        type=str,
+        choices=["t2m", "core4", "extended", "core4_elev", "core4_topo"],
+        default="extended",
+    )
+    parser.add_argument(
+        "--static-covariate-path",
+        type=str,
+        default=None,
+        help="Optional DEM-derived static covariate NetCDF for core4_elev/core4_topo input sets.",
+    )
     parser.add_argument(
         "--model",
         type=str,
@@ -484,6 +495,7 @@ def main() -> None:
         prism_path=str(prism_path),
         history_length=args.history_length,
         input_set=args.input_set,
+        static_covariate_path=args.static_covariate_path,
         verbose=False,
     )
     stats = getattr(dataset, "summary_stats", {})

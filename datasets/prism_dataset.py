@@ -37,6 +37,12 @@ CHANNEL_SETS = {
     "t2m": [("t2m", ("t2m", "2m_temperature"))],
     "core4": CORE4_CHANNELS,
     "extended": EXTENDED_CHANNELS,
+    "core4_elev": CORE4_CHANNELS,
+    "core4_topo": CORE4_CHANNELS,
+}
+STATIC_FEATURE_SETS = {
+    "core4_elev": ["elevation"],
+    "core4_topo": ["elevation", "slope", "aspect", "terrain_gradient_magnitude"],
 }
 
 
@@ -72,6 +78,7 @@ class ERA5_PRISM_Dataset(Dataset):
         history_length: int = 3,
         input_set: str = "extended",
         era5_variable: Optional[str] = None,
+        static_covariate_path: Optional[str] = None,
         auto_scale_prism: bool = True,
         verbose: bool = True,
     ) -> None:
@@ -79,12 +86,18 @@ class ERA5_PRISM_Dataset(Dataset):
         self.prism_path = Path(prism_path)
         self.history_length = int(history_length)
         self.input_set = str(input_set)
+        self.static_covariate_path = Path(static_covariate_path) if static_covariate_path else None
         self.auto_scale_prism = auto_scale_prism
 
         if self.history_length < 1:
             raise ValueError("history_length must be >= 1")
         if self.input_set not in CHANNEL_SETS:
             raise ValueError(f"input_set must be one of {list(CHANNEL_SETS.keys())}, got '{self.input_set}'")
+        if self.input_set in STATIC_FEATURE_SETS:
+            if self.static_covariate_path is None:
+                raise ValueError(f"input_set='{self.input_set}' requires static_covariate_path")
+            if not self.static_covariate_path.exists():
+                raise FileNotFoundError(f"Static covariate file not found: {self.static_covariate_path}")
         if not self.era5_path.exists():
             raise FileNotFoundError(f"ERA5 file not found: {self.era5_path}")
 
@@ -204,6 +217,8 @@ class ERA5_PRISM_Dataset(Dataset):
         if verbose:
             print("Dataset summary:")
             print(f"  input_set={self.input_set} channels={self.channel_names}")
+            if self.static_covariate_path is not None:
+                print(f"  static_covariate_path={self.static_covariate_path}")
             print(f"  history_length={self.history_length}")
             print(f"  total_candidate_dates={stats['candidate_dates']}")
             print(f"  usable_samples={stats['usable_samples']}")
@@ -355,7 +370,68 @@ class ERA5_PRISM_Dataset(Dataset):
         if stacked.sizes.get("time", 0) < 1:
             raise ValueError("ERA5 dataset has no usable daily timesteps after alignment")
 
+        static_features = STATIC_FEATURE_SETS.get(self.input_set, [])
+        if static_features:
+            stacked = self._append_static_channels(stacked, static_features)
+
         return stacked
+
+    def _append_static_channels(self, stacked: xr.DataArray, feature_names: Sequence[str]) -> xr.DataArray:
+        if self.static_covariate_path is None:
+            raise ValueError(f"input_set='{self.input_set}' requires static_covariate_path")
+        try:
+            static_ds = xr.open_dataset(self.static_covariate_path)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to open static covariate NetCDF: {self.static_covariate_path}") from exc
+
+        static_arrays: List[xr.DataArray] = []
+        for feature in feature_names:
+            if feature not in static_ds.data_vars:
+                raise ValueError(
+                    f"Static covariate file is missing '{feature}'. "
+                    f"Available: {list(static_ds.data_vars)}"
+                )
+            da = static_ds[feature]
+            rename_map = {}
+            if "y" in da.dims:
+                rename_map["y"] = "latitude"
+            if "x" in da.dims:
+                rename_map["x"] = "longitude"
+            if rename_map:
+                da = da.rename(rename_map)
+            if "latitude" not in da.dims or "longitude" not in da.dims:
+                raise ValueError(f"Static feature '{feature}' must have y/x or latitude/longitude dimensions")
+            if not np.all(np.diff(da["latitude"].values) > 0):
+                da = da.sortby("latitude")
+            if not np.all(np.diff(da["longitude"].values) > 0):
+                da = da.sortby("longitude")
+
+            aligned = da.interp(
+                latitude=stacked["latitude"],
+                longitude=stacked["longitude"],
+                method="linear",
+            )
+            arr = aligned.values.astype(np.float32)
+            if not np.isfinite(arr).all():
+                finite = arr[np.isfinite(arr)]
+                if finite.size == 0:
+                    raise ValueError(f"Static feature '{feature}' has no finite values after ERA5-grid alignment")
+                arr = np.nan_to_num(arr, nan=float(finite.mean())).astype(np.float32)
+            aligned = xr.DataArray(
+                arr,
+                dims=("latitude", "longitude"),
+                coords={
+                    "latitude": stacked["latitude"].values,
+                    "longitude": stacked["longitude"].values,
+                },
+                name=feature,
+            )
+            expanded = aligned.expand_dims(time=stacked["time"]).transpose("time", "latitude", "longitude")
+            static_arrays.append(expanded)
+
+        static_stack = xr.concat(static_arrays, dim="channel").assign_coords(channel=list(feature_names))
+        static_stack = static_stack.transpose("time", "channel", "latitude", "longitude")
+        return xr.concat([stacked, static_stack], dim="channel").transpose("time", "channel", "latitude", "longitude")
 
     @staticmethod
     def _get_era5_bounds(era5_daily: xr.DataArray) -> Tuple[float, float, float, float]:
