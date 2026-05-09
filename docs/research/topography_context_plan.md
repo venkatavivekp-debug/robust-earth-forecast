@@ -12,6 +12,26 @@ This matches the current evidence:
 - Border RMSE remains above center RMSE, including for persistence, so clipped-domain context is part of the issue.
 - Padding and upsampling choices change the error profile but do not remove blur.
 - Longer training gives only mild improvement, so undertraining alone is not the dominant explanation.
+- Spatial sharpness diagnostics show that U-Net keeps broad variance close to PRISM but loses much of the target gradient, local contrast, and high-frequency detail.
+
+## Current data state
+
+No real DEM/topography file is currently present in the repository or local ignored data folders. Do not create synthetic terrain or placeholder channels. The next step is to place a real DEM raster locally, document the source, and run the preparation script before any dataset or model change.
+
+Expected local source path:
+
+```text
+data_raw/static/source_dem/<source_dem_file>.tif
+```
+
+Expected processed output path:
+
+```text
+data_raw/static/topography/georgia_prism_topography.nc
+data_raw/static/topography/georgia_prism_topography.metadata.json
+```
+
+These paths are under `data_raw/` and should remain ignored by git.
 
 ## Why before temporal modeling
 
@@ -28,6 +48,27 @@ Do not add topography until a real source is selected and documented. Reasonable
 - derived static fields such as elevation, slope, aspect, terrain gradient, and possibly distance-to-coast or land mask if justified.
 
 All static fields must be reprojected/aligned to the PRISM target grid and normalized using training-split statistics only.
+
+## Preparation path
+
+The preparation script is intentionally source-file driven:
+
+```bash
+python3 scripts/prepare_topography_context.py \
+  --dem-path data_raw/static/source_dem/<source_dem_file>.tif \
+  --dataset-version medium \
+  --source-name "USGS 3DEP/NED or selected DEM source"
+```
+
+It should:
+
+- load a real DEM raster with CRS metadata;
+- use an existing PRISM raster as the target grid;
+- reproject/resample the DEM to the PRISM grid;
+- write elevation, slope, aspect, and terrain-gradient channels;
+- write metadata with source name, grid shape, CRS, resolution, and feature statistics.
+
+The processed channels are raw static fields. Model training should still learn normalization from the training split only.
 
 ## Fair comparison
 
