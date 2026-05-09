@@ -36,6 +36,7 @@ The active phase is boundary-aware spatial reconstruction:
 | Topography helps | full topo U-Net direct RMSE `1.4481 +/- 0.1428` across seeds | static terrain context is physically useful |
 | Residual topography helps more | residual topo RMSE `1.3858 +/- 0.0564`; gradient ratio `0.5665` | learning PRISM correction over ERA5 is better grounded |
 | Gradient-aware loss is not enough | best RMSE remains `mse_l1`; gradient losses only slightly improve detail ratios | objective mismatch is not the whole bottleneck |
+| Training sanity is not clean | one-sample residual overfit stalls at `0.2249` RMSE after 600 epochs | debug training/reconstruction before adding more modeling |
 
 Visual examples:
 
@@ -78,6 +79,12 @@ The strongest current interpretation is:
 
 > Terrain-conditioned residual U-Net improves the reconstruction, but most fine PRISM-scale detail is still missing. The remaining limitation is tied to reconstruction behavior, boundary context, decoder smoothing/artifacts, and limited spatial information, not just undertraining or loss choice.
 
+## Training Sanity Checks
+
+The latest debug pass does not show an obvious date/unit/residual-scaling bug, but the overfit checks are not clean. A terrain residual U-Net reaches `0.2249` RMSE on one fixed sample after 600 epochs, and the 4/8-sample subset checks also fail to memorize strongly. Doubling U-Net width helps the tiny-subset fit (`0.3660` best train RMSE) but does not resolve it.
+
+This points back to training/reconstruction behavior before adding ConvLSTM, more inputs, or another architecture family. See [`docs/experiments/training_sanity_checks.md`](docs/experiments/training_sanity_checks.md).
+
 ## Result Docs
 
 Core reconstruction diagnostics:
@@ -91,6 +98,7 @@ Core reconstruction diagnostics:
 - [`docs/experiments/topography_seed_stability.md`](docs/experiments/topography_seed_stability.md)
 - [`docs/experiments/topography_residual_stability.md`](docs/experiments/topography_residual_stability.md)
 - [`docs/experiments/detail_preserving_loss_results.md`](docs/experiments/detail_preserving_loss_results.md)
+- [`docs/experiments/training_sanity_checks.md`](docs/experiments/training_sanity_checks.md)
 
 Archived or supporting context:
 
@@ -106,6 +114,8 @@ Research framing:
 - [`docs/research/failure_mode_catalog.md`](docs/research/failure_mode_catalog.md)
 - [`docs/research/topography_context_plan.md`](docs/research/topography_context_plan.md)
 - [`docs/research/detail_preserving_loss_reasoning.md`](docs/research/detail_preserving_loss_reasoning.md)
+- [`docs/research/training_data_sanity_audit.md`](docs/research/training_data_sanity_audit.md)
+- [`docs/research/paper_alignment_notes.md`](docs/research/paper_alignment_notes.md)
 
 ## Reproduce
 
@@ -141,6 +151,9 @@ python3 scripts/download_dem_data.py --bbox=-85,30,-80,35 --source usgs_3dep_ima
 python3 scripts/prepare_topography_context.py --dem-path data_raw/static/source_dem/<dem>.tif --dataset-version medium
 python3 scripts/run_topography_residual_stability.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc --seeds 42 7 123
 python3 scripts/run_detail_preserving_loss.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc --seeds 42 7 123
+python3 scripts/overfit_single_sample.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc
+python3 scripts/overfit_small_subset.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc
+python3 scripts/run_training_capacity_diagnosis.py --dataset-version medium --static-covariate-path data_processed/static/georgia_prism_topography.nc
 ```
 
 ## Repository Layout
@@ -165,6 +178,7 @@ python3 scripts/run_detail_preserving_loss.py --dataset-version medium --static-
 - Boundary behavior remains unresolved.
 - Residual topography improves mean metrics but still loses most fine PRISM detail.
 - Gradient-aware loss gives only a small detail signal and is not the new default.
+- The current U-Net does not pass a strict tiny-sample memorization check.
 - Temporal modeling is intentionally postponed.
 
 ## Next Work
