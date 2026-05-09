@@ -99,6 +99,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--hidden-channels", type=int, default=32, help="Hidden channels for ConvLSTM")
+    parser.add_argument("--unet-base-channels", type=int, default=24, help="Base channels for U-Net diagnostics")
     parser.add_argument(
         "--unet-padding-mode",
         type=str,
@@ -225,7 +226,7 @@ def build_model(args: argparse.Namespace, sample_x: Any, sample_y: Any) -> Tuple
             base_channels = 32
             model = CNNDownscaler(in_channels=in_channels, out_channels=int(sample_y.shape[0]))
         else:
-            base_channels = 24
+            base_channels = int(args.unet_base_channels)
             model = UNetDownscaler(
                 in_channels=in_channels,
                 out_channels=int(sample_y.shape[0]),

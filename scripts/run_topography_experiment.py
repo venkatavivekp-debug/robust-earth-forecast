@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--weight-decay", type=float, default=0.0)
+    parser.add_argument("--unet-base-channels", type=int, default=24)
     parser.add_argument("--loss-mode", choices=["mse", "mse_l1", "mse_grad", "mse_l1_grad"], default="mse_l1")
     parser.add_argument("--l1-weight", type=float, default=0.1)
     parser.add_argument("--grad-weight", type=float, default=0.05)
@@ -139,6 +140,8 @@ def train_variants(
             str(args.learning_rate),
             "--weight-decay",
             str(args.weight_decay),
+            "--unet-base-channels",
+            str(args.unet_base_channels),
             "--loss-mode",
             str(args.loss_mode),
             "--l1-weight",
