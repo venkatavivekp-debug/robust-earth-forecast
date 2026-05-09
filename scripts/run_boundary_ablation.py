@@ -224,6 +224,39 @@ def corrcoef(a: np.ndarray, b: np.ndarray) -> float:
     return value if np.isfinite(value) else 0.0
 
 
+def gradient_magnitude(cube: np.ndarray) -> np.ndarray:
+    gy, gx = np.gradient(np.asarray(cube, dtype=np.float64), axis=(-2, -1))
+    return np.sqrt(gx**2 + gy**2)
+
+
+def box_mean(cube: np.ndarray, window: int = 7) -> np.ndarray:
+    arr = np.asarray(cube, dtype=np.float64)
+    squeeze = False
+    if arr.ndim == 2:
+        arr = arr[None, ...]
+        squeeze = True
+    pad = window // 2
+    padded = np.pad(arr, ((0, 0), (pad, pad), (pad, pad)), mode="reflect")
+    out = np.zeros_like(arr, dtype=np.float64)
+    h, w = arr.shape[-2:]
+    for dy in range(window):
+        for dx in range(window):
+            out += padded[:, dy : dy + h, dx : dx + w]
+    out /= float(window * window)
+    return out[0] if squeeze else out
+
+
+def high_pass(cube: np.ndarray, window: int = 7) -> np.ndarray:
+    return np.asarray(cube, dtype=np.float64) - box_mean(cube, window)
+
+
+def local_contrast(cube: np.ndarray, window: int = 7) -> np.ndarray:
+    arr = np.asarray(cube, dtype=np.float64)
+    mean = box_mean(arr, window)
+    mean_sq = box_mean(arr * arr, window)
+    return np.sqrt(np.maximum(mean_sq - mean * mean, 0.0))
+
+
 def compute_metrics(
     *,
     variant: str,
@@ -245,10 +278,34 @@ def compute_metrics(
         "pred_variance": float(np.var(pred_cube)),
         "target_variance": float(np.var(target_cube)),
     }
+    pred_grad = gradient_magnitude(pred_cube)
+    target_grad = gradient_magnitude(target_cube)
+    pred_detail = high_pass(pred_cube)
+    target_detail = high_pass(target_cube)
+    pred_contrast = local_contrast(pred_cube)
+    target_contrast = local_contrast(target_cube)
+    row["prediction_gradient_mean"] = float(np.mean(pred_grad))
+    row["target_gradient_mean"] = float(np.mean(target_grad))
+    row["gradient_ratio"] = float(row["prediction_gradient_mean"] / max(row["target_gradient_mean"], 1e-8))
+    row["gradient_magnitude_rmse"] = rmse(pred_grad - target_grad)
+    row["prediction_high_frequency_energy"] = float(np.mean(pred_detail**2))
+    row["target_high_frequency_energy"] = float(np.mean(target_detail**2))
+    row["high_frequency_ratio"] = float(
+        row["prediction_high_frequency_energy"] / max(row["target_high_frequency_energy"], 1e-8)
+    )
+    row["prediction_local_contrast"] = float(np.mean(pred_contrast))
+    row["target_local_contrast"] = float(np.mean(target_contrast))
+    row["local_contrast_ratio"] = float(row["prediction_local_contrast"] / max(row["target_local_contrast"], 1e-8))
     for name, mask2d in masks.items():
         mask = np.broadcast_to(mask2d, errors.shape)
         row[f"{name}_rmse"] = rmse(errors[mask])
         row[f"{name}_mae"] = mae(abs_errors[mask])
+        if name in {"border", "center", "top", "bottom", "left", "right"}:
+            pred_var = float(np.var(pred_cube[mask]))
+            target_var = float(np.var(target_cube[mask]))
+            row[f"{name}_pred_variance"] = pred_var
+            row[f"{name}_target_variance"] = target_var
+            row[f"{name}_variance_ratio"] = float(pred_var / max(target_var, 1e-8))
     row["border_center_rmse_ratio"] = float(row["border_rmse"] / max(row["center_rmse"], 1e-8))
     row["variance_ratio"] = float(row["pred_variance"] / max(row["target_variance"], 1e-8))
     row.update(metadata)
@@ -321,6 +378,46 @@ def save_error_map(mean_abs_error: np.ndarray, output_path: Path, title: str) ->
     ax.set_title(title)
     ax.axis("off")
     fig.colorbar(im, ax=ax, shrink=0.85, label="Mean |error| (deg C)")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+
+
+def save_gradient_detail_maps(
+    *,
+    prediction: np.ndarray,
+    target: np.ndarray,
+    output_path: Path,
+    title: str,
+) -> None:
+    _configure_plot_cache()
+    import matplotlib.pyplot as plt
+
+    pred_grad = gradient_magnitude(prediction)
+    target_grad = gradient_magnitude(target)
+    pred_detail = high_pass(prediction)
+    target_detail = high_pass(target)
+    pred_contrast = local_contrast(prediction)
+    target_contrast = local_contrast(target)
+    grad_vmax = float(max(np.percentile(pred_grad, 99), np.percentile(target_grad, 99)))
+    detail_vmax = float(max(np.percentile(np.abs(pred_detail), 99), np.percentile(np.abs(target_detail), 99)))
+    contrast_vmax = float(max(np.percentile(pred_contrast, 99), np.percentile(target_contrast, 99)))
+
+    fig, axes = plt.subplots(3, 2, figsize=(8, 10), constrained_layout=True)
+    panels = [
+        ("prediction gradient", pred_grad, "viridis", 0.0, grad_vmax),
+        ("target gradient", target_grad, "viridis", 0.0, grad_vmax),
+        ("prediction high-pass", pred_detail, "coolwarm", -detail_vmax, detail_vmax),
+        ("target high-pass", target_detail, "coolwarm", -detail_vmax, detail_vmax),
+        ("prediction contrast", pred_contrast, "magma", 0.0, contrast_vmax),
+        ("target contrast", target_contrast, "magma", 0.0, contrast_vmax),
+    ]
+    for ax, (label, arr, cmap, vmin, vmax) in zip(axes.ravel(), panels):
+        im = ax.imshow(arr, cmap=cmap, vmin=vmin, vmax=vmax)
+        ax.set_title(label)
+        ax.axis("off")
+        fig.colorbar(im, ax=ax, shrink=0.75)
+    fig.suptitle(title)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -459,6 +556,12 @@ def evaluate_variant(args: argparse.Namespace, variant: str, checkpoint_path: Pa
         variant_dir / "absolute_error_map.png",
         f"{variant} mean absolute error",
     )
+    save_gradient_detail_maps(
+        prediction=predictions[0],
+        target=targets[0],
+        output_path=variant_dir / "gradient_detail_maps.png",
+        title=f"{variant} reconstruction detail",
+    )
     save_distance_plot(rows, variant_dir / "error_vs_boundary_distance.png")
     (variant_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     return metrics, rows
@@ -507,6 +610,16 @@ def main() -> None:
         "pred_mean",
         "target_mean",
         "variance_ratio",
+        "gradient_ratio",
+        "high_frequency_ratio",
+        "local_contrast_ratio",
+        "gradient_magnitude_rmse",
+        "border_variance_ratio",
+        "center_variance_ratio",
+        "top_variance_ratio",
+        "bottom_variance_ratio",
+        "left_variance_ratio",
+        "right_variance_ratio",
         "dataset_version",
         "input_set",
         "history_length",
