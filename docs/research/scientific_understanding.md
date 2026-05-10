@@ -34,6 +34,24 @@ Sharper reconstruction requires at least one of:
 - additional physically relevant inputs;
 - a target/loss/evaluation setup that does not reward averaging away local spread.
 
+## Residual Collapse and Conditional Mean Behavior
+
+The controlled spatial benchmark adds a visual clue: the U-Net prediction can look close to bilinear ERA5 under full-field color scales. In residual mode that raised a specific hypothesis: maybe the network was predicting a near-zero correction almost everywhere.
+
+The residual-collapse diagnostic did not confirm the strict near-zero version of that hypothesis. Across the validation set, mean `|predicted residual|` was `1.7364 deg C`, mean `|target residual|` was `1.9428 deg C`, and the magnitude ratio was `0.8938`, not `< 0.2`. The mean predicted and target residual maps were also strongly correlated (`r = 0.9632`).
+
+So the model is not simply outputting zero residual. It is learning a stable spatial residual pattern. The harder failure is that this residual pattern still does not resolve the day-to-day PRISM detail well enough to make the final field visually sharp.
+
+This remains consistent with the physics baseline numbers. For the fixed overfit sample, the residual target has standard deviation `1.6933 deg C`. The terrain-linear analysis gives residual R2 = `0.0543`, so only about `5.4%` of the daily residual variance is explained by elevation, slope, and aspect. The remaining `94.6%` has no simple systematic relationship to the current ERA5/topography inputs.
+
+Under MSE, the learned function moves toward the conditional mean of the target residual. If the residual is mostly unpredictable from the inputs, that conditional mean is near zero. A near-zero predicted residual gives:
+
+`prediction = ERA5_bilinear + near_zero_residual`
+
+In this run the correction is not near zero, but the same conditional-mean logic still applies: the learned residual is a smoothed, stable component of the daily residual rather than the full daily PRISM correction. That can still make the final temperature field look close to bilinear ERA5 when plotted over a broad Celsius range.
+
+For the model to produce PRISM-like spatial structure, at least one condition has to change. The training set must become much larger so day-to-day ERA5 states and local terrain-temperature regimes become distinguishable; the target must become more predictable, such as a static mean bias map rather than the daily residual; or additional inputs must constrain the realization, such as station information, land cover, or high-resolution surface-energy context.
+
 ## Revised Understanding After Physics Baseline Analysis
 
 The physics baselines changed the interpretation.
