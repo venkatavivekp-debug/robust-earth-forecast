@@ -53,6 +53,10 @@ Visual examples:
 3. Static bias HF retention `0.205`: the decoder loses about 80% of local fine detail even on a stable, learnable target.
 4. Skip connections reduce border RMSE by `26%`: the skip path helps, but it does not solve the near-grid reconstruction loss.
 5. Primary bottleneck for the stable target: decoder upsampling pathway, not information or encoder. Daily residual skill is still bounded by the ERA5/PRISM information gap.
+6. PixelShuffle raises static-bias 4-8 km retention from `0.069` to `0.540`; on the fixed residual overfit sample it lowers RMSE from `0.1875` to `0.1375`.
+7. Boundary gradients improve with PixelShuffle: Sobel-gradient r vs PRISM is `0.904` vs `0.749` for the bilinear decoder.
+
+The decoder upsampling method is the primary reconstruction bottleneck at PRISM native scale (4-8 km); PixelShuffle raises 4-8 km retention from 6.9% to 53.97% in a controlled diagnostic.
 
 ## Boundary-Aware Evaluation
 
@@ -108,6 +112,7 @@ Core reconstruction diagnostics:
 - [`docs/experiments/detail_preserving_loss_results.md`](docs/experiments/detail_preserving_loss_results.md)
 - [`docs/experiments/training_sanity_checks.md`](docs/experiments/training_sanity_checks.md)
 - [`docs/experiments/training_pipeline_diagnosis.md`](docs/experiments/training_pipeline_diagnosis.md)
+- [`docs/experiments/pixelshuffle_overfit_results.md`](docs/experiments/pixelshuffle_overfit_results.md)
 
 Archived or supporting context:
 
@@ -128,6 +133,9 @@ Research framing:
 - [`docs/research/decoder_pathway_findings.md`](docs/research/decoder_pathway_findings.md)
 - [`docs/research/upsampling_method_findings.md`](docs/research/upsampling_method_findings.md)
 - [`docs/research/skip_feature_quality_findings.md`](docs/research/skip_feature_quality_findings.md)
+- [`docs/research/padding_audit.md`](docs/research/padding_audit.md)
+- [`docs/research/boundary_context_fix.md`](docs/research/boundary_context_fix.md)
+- [`docs/research/boundary_gradient_findings.md`](docs/research/boundary_gradient_findings.md)
 - [`docs/research/paper_alignment_notes.md`](docs/research/paper_alignment_notes.md)
 
 ## Reproduce
