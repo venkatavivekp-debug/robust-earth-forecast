@@ -55,8 +55,10 @@ Visual examples:
 5. Primary bottleneck for the stable target: decoder upsampling pathway, not information or encoder. Daily residual skill is still bounded by the ERA5/PRISM information gap.
 6. PixelShuffle raises static-bias 4-8 km retention from `0.069` to `0.540`; on the fixed residual overfit sample it lowers RMSE from `0.1875` to `0.1375`.
 7. Boundary gradients improve with PixelShuffle: Sobel-gradient r vs PRISM is `0.904` vs `0.749` for the bilinear decoder.
+8. Full medium training with PixelShuffle does not lower RMSE: `1.4104 +/- 0.0958` vs the bilinear residual-topography reference `1.3858 +/- 0.0564`. Detail ratios improve, so the diagnostic gain only partially transfers.
 
 The decoder upsampling method is the primary reconstruction bottleneck at PRISM native scale (4-8 km); PixelShuffle raises 4-8 km retention from 6.9% to 53.97% in a controlled diagnostic.
+On full daily validation, the remaining data/target limit dominates RMSE.
 
 ## Boundary-Aware Evaluation
 
@@ -113,6 +115,7 @@ Core reconstruction diagnostics:
 - [`docs/experiments/training_sanity_checks.md`](docs/experiments/training_sanity_checks.md)
 - [`docs/experiments/training_pipeline_diagnosis.md`](docs/experiments/training_pipeline_diagnosis.md)
 - [`docs/experiments/pixelshuffle_overfit_results.md`](docs/experiments/pixelshuffle_overfit_results.md)
+- [`docs/experiments/pixelshuffle_full_training_results.md`](docs/experiments/pixelshuffle_full_training_results.md)
 
 Archived or supporting context:
 
@@ -136,6 +139,7 @@ Research framing:
 - [`docs/research/padding_audit.md`](docs/research/padding_audit.md)
 - [`docs/research/boundary_context_fix.md`](docs/research/boundary_context_fix.md)
 - [`docs/research/boundary_gradient_findings.md`](docs/research/boundary_gradient_findings.md)
+- [`docs/research/research_summary.md`](docs/research/research_summary.md)
 - [`docs/research/paper_alignment_notes.md`](docs/research/paper_alignment_notes.md)
 
 ## Reproduce
