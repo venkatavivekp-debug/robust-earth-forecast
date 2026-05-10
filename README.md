@@ -40,11 +40,11 @@ The active phase is boundary-aware spatial reconstruction:
 
 Visual examples:
 
-![Model comparison across baselines and learned models](docs/images/model_comparison.png)
+![ERA5 to PRISM reconstruction with PixelShuffle U-Net](docs/images/reconstruction_comparison_pixelshuffle.png)
 
-![Controlled spatial benchmark prediction panel](docs/images/spatial_benchmark_prediction_panel.png)
+![PSD comparison for bilinear and PixelShuffle upsampling](docs/images/psd_comparison_upsampling.png)
 
-![Controlled spatial benchmark error maps](docs/images/spatial_benchmark_error_maps.png)
+![Boundary gradient comparison for PRISM, PixelShuffle, and bilinear decoder](docs/images/boundary_gradient_comparison.png)
 
 ## Key Scientific Findings
 
@@ -214,3 +214,9 @@ Stay with spatial reconstruction:
 2. boundary-distance diagnostics for terrain residuals;
 3. decoder/skip feature diagnostics for where detail is lost;
 4. data coverage checks before any temporal model is revived.
+
+## Historical Model Comparison Context
+
+The older baseline comparison predates the current diagnostic focus:
+
+![Historical model comparison across baselines and learned models](docs/images/model_comparison.png)
