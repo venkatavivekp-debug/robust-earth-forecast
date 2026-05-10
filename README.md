@@ -36,7 +36,7 @@ The active phase is boundary-aware spatial reconstruction:
 | Topography helps | full topo U-Net direct RMSE `1.4481 +/- 0.1428` across seeds | static terrain context is physically useful |
 | Residual topography helps more | residual topo RMSE `1.3858 +/- 0.0564`; gradient ratio `0.5665` | learning PRISM correction over ERA5 is better grounded |
 | Gradient-aware loss is not enough | best RMSE remains `mse_l1`; gradient losses only slightly improve detail ratios | objective mismatch is not the whole bottleneck |
-| Training sanity is not clean | one-sample residual overfit stalls at `0.2249` RMSE after 600 epochs | debug training/reconstruction before adding more modeling |
+| Training pipeline is active | fixed-LR one-sample overfit reaches `0.1875` RMSE after 1000 epochs | not a dead optimizer or residual head |
 
 Visual examples:
 
@@ -45,6 +45,14 @@ Visual examples:
 ![Controlled spatial benchmark prediction panel](docs/images/spatial_benchmark_prediction_panel.png)
 
 ![Controlled spatial benchmark error maps](docs/images/spatial_benchmark_error_maps.png)
+
+## Key Scientific Findings
+
+1. Terrain R2 = `0.054`: the daily residual is not primarily terrain-predictable.
+2. Residual collapse ratio `0.89` and spatial r `0.96`: the model learns the correct mean spatial residual pattern; visual blur is not from near-zero residuals.
+3. Static bias HF retention `0.205`: the decoder loses about 80% of local fine detail even on a stable, learnable target.
+4. Skip connections reduce border RMSE by `26%`: the skip path helps, but it does not solve the near-grid reconstruction loss.
+5. Primary bottleneck for the stable target: decoder upsampling pathway, not information or encoder. Daily residual skill is still bounded by the ERA5/PRISM information gap.
 
 ## Boundary-Aware Evaluation
 
@@ -81,9 +89,9 @@ The strongest current interpretation is:
 
 ## Training Sanity Checks
 
-The latest debug pass does not show an obvious date/unit/residual-scaling bug, but the overfit checks are not clean. A terrain residual U-Net reaches `0.2249` RMSE on one fixed sample after 600 epochs, and the 4/8-sample subset checks also fail to memorize strongly. Doubling U-Net width helps the tiny-subset fit (`0.3660` best train RMSE) but does not resolve it.
+The latest debug pass does not show an obvious date/unit/residual-scaling bug. With fixed LR, no scheduler, reflection padding, and 1000 epochs, the one-sample residual U-Net reaches `0.1875` RMSE and the loss decays smoothly. The residual head is not dead: validation residual magnitude ratio is `0.8938`, and the mean residual map correlation is `0.9632`.
 
-This points back to training/reconstruction behavior before adding ConvLSTM, more inputs, or another architecture family. See [`docs/experiments/training_sanity_checks.md`](docs/experiments/training_sanity_checks.md).
+The remaining problem is reconstruction quality and data scale. Static-bias learning succeeds (`0.2343` RMSE, `0.9861` correlation), but high-frequency detail remains weak. See [`docs/experiments/training_pipeline_diagnosis.md`](docs/experiments/training_pipeline_diagnosis.md).
 
 ## Result Docs
 
@@ -99,6 +107,7 @@ Core reconstruction diagnostics:
 - [`docs/experiments/topography_residual_stability.md`](docs/experiments/topography_residual_stability.md)
 - [`docs/experiments/detail_preserving_loss_results.md`](docs/experiments/detail_preserving_loss_results.md)
 - [`docs/experiments/training_sanity_checks.md`](docs/experiments/training_sanity_checks.md)
+- [`docs/experiments/training_pipeline_diagnosis.md`](docs/experiments/training_pipeline_diagnosis.md)
 
 Archived or supporting context:
 
@@ -115,6 +124,10 @@ Research framing:
 - [`docs/research/topography_context_plan.md`](docs/research/topography_context_plan.md)
 - [`docs/research/detail_preserving_loss_reasoning.md`](docs/research/detail_preserving_loss_reasoning.md)
 - [`docs/research/training_data_sanity_audit.md`](docs/research/training_data_sanity_audit.md)
+- [`docs/research/complete_diagnosis_narrative.md`](docs/research/complete_diagnosis_narrative.md)
+- [`docs/research/decoder_pathway_findings.md`](docs/research/decoder_pathway_findings.md)
+- [`docs/research/upsampling_method_findings.md`](docs/research/upsampling_method_findings.md)
+- [`docs/research/skip_feature_quality_findings.md`](docs/research/skip_feature_quality_findings.md)
 - [`docs/research/paper_alignment_notes.md`](docs/research/paper_alignment_notes.md)
 
 ## Reproduce
