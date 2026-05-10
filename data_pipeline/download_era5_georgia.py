@@ -46,7 +46,13 @@ def parse_args() -> argparse.Namespace:
         nargs=4,
         default=[35.0, -85.0, 30.0, -80.0],
         metavar=("N", "W", "S", "E"),
-        help="Bounding box [north west south east] for Georgia",
+        help="Core bounding box [north west south east] for Georgia before optional buffer",
+    )
+    parser.add_argument(
+        "--era5-buffer-deg",
+        type=float,
+        default=0.25,
+        help="Expand the requested ERA5 area by this many degrees on every side (default: one ERA5 grid cell).",
     )
     parser.add_argument(
         "--overwrite",
@@ -261,6 +267,16 @@ def _slice_time_inclusive(ds: xr.Dataset, d0: date, d1: date) -> xr.Dataset:
     return ds.sel(time=slice(t0, t1))
 
 
+def _apply_area_buffer(area: List[float], buffer_deg: float) -> List[float]:
+    north, west, south, east = [float(v) for v in area]
+    if buffer_deg < 0:
+        raise ValueError("--era5-buffer-deg must be >= 0")
+    buffered = [north + buffer_deg, west - buffer_deg, south - buffer_deg, east + buffer_deg]
+    if buffered[0] <= buffered[2] or buffered[1] >= buffered[3]:
+        raise ValueError(f"Invalid buffered ERA5 area: {buffered}")
+    return buffered
+
+
 def main() -> None:
     args = parse_args()
     output_path = Path(args.out)
@@ -310,7 +326,8 @@ def main() -> None:
         ) from exc
 
     client = cdsapi.Client()
-    area = list(args.area)
+    core_area = list(args.area)
+    area = _apply_area_buffer(core_area, float(args.era5_buffer_deg))
 
     if use_range:
         d0 = datetime.strptime(args.start_date, "%Y%m%d").date()
@@ -319,7 +336,9 @@ def main() -> None:
             raise ValueError("--end-date must be on or after --start-date")
         print("Starting ERA5 multi-month download...")
         print(f"  range={args.start_date}..{args.end_date} (inclusive)")
-        print(f"  area={area}")
+        print(f"  core_area={core_area}")
+        print(f"  era5_buffer_deg={float(args.era5_buffer_deg):.3f}")
+        print(f"  request_area={area}")
         print(f"  output={output_path}")
 
         month_parts: List[xr.Dataset] = []
@@ -344,7 +363,9 @@ def main() -> None:
     else:
         print("Starting ERA5 download (single calendar month)...")
         print(f"  year={args.year} month={args.month:02d}")
-        print(f"  area={area}")
+        print(f"  core_area={core_area}")
+        print(f"  era5_buffer_deg={float(args.era5_buffer_deg):.3f}")
+        print(f"  request_area={area}")
         print(f"  output={output_path}")
 
         with tempfile.TemporaryDirectory(prefix="era5_dl_") as tmp_dir:
