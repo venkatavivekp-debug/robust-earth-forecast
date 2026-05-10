@@ -46,6 +46,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--unet-base-channels", type=int, default=24)
+    parser.add_argument(
+        "--unet-padding-mode",
+        choices=["reflection", "zero", "replicate"],
+        default="reflection",
+        help="Boundary padding used by U-Net convolution blocks.",
+    )
+    parser.add_argument(
+        "--upsampling-mode",
+        "--unet-upsampling-mode",
+        dest="unet_upsampling_mode",
+        choices=["bilinear", "convtranspose", "pixelshuffle"],
+        default="bilinear",
+        help="U-Net decoder upsampling path.",
+    )
     parser.add_argument("--loss-mode", choices=["mse", "mse_l1", "mse_grad", "mse_l1_grad"], default="mse_l1")
     parser.add_argument("--l1-weight", type=float, default=0.1)
     parser.add_argument("--grad-weight", type=float, default=0.05)
@@ -169,9 +183,9 @@ def train_variants(
             "--device",
             str(args.device),
             "--unet-padding-mode",
-            "replicate",
+            str(args.unet_padding_mode),
             "--unet-upsampling-mode",
-            "bilinear",
+            str(args.unet_upsampling_mode),
             "--checkpoint-out",
             str(checkpoint),
             "--training-results-dir",
@@ -373,8 +387,8 @@ def evaluate_variant(
         "history_length": int(args.history_length),
         "target_mode": args.target_mode,
         "loss_mode": args.loss_mode,
-        "padding": "replicate",
-        "upsampling": "bilinear",
+        "padding": args.unet_padding_mode,
+        "upsampling": args.unet_upsampling_mode,
         "split_seed": int(args.split_seed),
         "seed": int(args.seed),
         "num_samples": int(len(val_indices)),
