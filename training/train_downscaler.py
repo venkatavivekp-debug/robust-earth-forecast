@@ -110,7 +110,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--unet-upsampling-mode",
         type=str,
-        choices=["bilinear", "convtranspose"],
+        choices=["bilinear", "convtranspose", "pixelshuffle"],
         default="bilinear",
         help="U-Net decoder upsampling path",
     )

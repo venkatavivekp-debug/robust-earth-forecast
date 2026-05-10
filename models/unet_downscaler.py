@@ -31,6 +31,35 @@ class ConvBlock(nn.Module):
         return self.net(x)
 
 
+class PixelShuffleUpsample(nn.Module):
+    def __init__(self, channels: int, scale: int, padding_mode: str = "reflection") -> None:
+        super().__init__()
+        if padding_mode not in {"reflection", "zero", "replicate"}:
+            raise ValueError(f"Unsupported padding_mode: {padding_mode}")
+        if scale < 1:
+            raise ValueError("scale must be >= 1")
+        if padding_mode == "reflection":
+            self.expand = nn.Sequential(
+                nn.ReflectionPad2d(1),
+                nn.Conv2d(channels, channels * scale * scale, kernel_size=3),
+            )
+        elif padding_mode == "replicate":
+            self.expand = nn.Sequential(
+                nn.ReplicationPad2d(1),
+                nn.Conv2d(channels, channels * scale * scale, kernel_size=3),
+            )
+        else:
+            self.expand = nn.Conv2d(channels, channels * scale * scale, kernel_size=3, padding=1)
+        self.shuffle = nn.PixelShuffle(scale)
+        self.out_channels = int(channels)
+
+    def forward(self, x: torch.Tensor, size: Tuple[int, int]) -> torch.Tensor:
+        out = self.shuffle(self.expand(x))
+        if out.shape[-2:] != size:
+            out = F.interpolate(out, size=size, mode="bilinear", align_corners=False)
+        return out
+
+
 class UNetDownscaler(nn.Module):
     """Small spatial U-Net baseline for ERA5 -> PRISM downscaling."""
 
@@ -43,7 +72,7 @@ class UNetDownscaler(nn.Module):
         upsample_mode: str = "bilinear",
     ) -> None:
         super().__init__()
-        if upsample_mode not in {"bilinear", "convtranspose"}:
+        if upsample_mode not in {"bilinear", "convtranspose", "pixelshuffle"}:
             raise ValueError(f"Unsupported upsample_mode: {upsample_mode}")
         self.padding_mode = padding_mode
         self.upsample_mode = upsample_mode
@@ -59,6 +88,10 @@ class UNetDownscaler(nn.Module):
             self.up2 = nn.ConvTranspose2d(base_channels * 4, base_channels * 4, kernel_size=2, stride=2)
             self.up1 = nn.ConvTranspose2d(base_channels * 2, base_channels * 2, kernel_size=2, stride=2)
             self.up_high = nn.ConvTranspose2d(base_channels, base_channels, kernel_size=4, stride=4)
+        elif upsample_mode == "pixelshuffle":
+            self.up2 = PixelShuffleUpsample(base_channels * 4, scale=2, padding_mode=padding_mode)
+            self.up1 = PixelShuffleUpsample(base_channels * 2, scale=2, padding_mode=padding_mode)
+            self.up_high = PixelShuffleUpsample(base_channels, scale=4, padding_mode=padding_mode)
 
     @staticmethod
     def _prepare_input(x: torch.Tensor) -> torch.Tensor:
@@ -73,10 +106,12 @@ class UNetDownscaler(nn.Module):
         self,
         x: torch.Tensor,
         size: Tuple[int, int],
-        layer: Optional[nn.ConvTranspose2d] = None,
+        layer: Optional[nn.Module] = None,
     ) -> torch.Tensor:
         if self.upsample_mode == "bilinear" or layer is None:
             return F.interpolate(x, size=size, mode="bilinear", align_corners=False)
+        if isinstance(layer, PixelShuffleUpsample):
+            return layer(x, size=size)
         target_shape = (x.shape[0], layer.out_channels, int(size[0]), int(size[1]))
         try:
             out = layer(x, output_size=target_shape)

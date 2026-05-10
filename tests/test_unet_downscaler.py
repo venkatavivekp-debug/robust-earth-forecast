@@ -71,6 +71,19 @@ class UNetDownscalerSmokeTest(unittest.TestCase):
         self.assertIsNotNone(model.up2.weight.grad)
         self.assertGreater(float(model.up2.weight.grad.abs().sum()), 0.0)
 
+        model = UNetDownscaler(
+            in_channels=12,
+            out_channels=1,
+            base_channels=8,
+            padding_mode="reflection",
+            upsample_mode="pixelshuffle",
+        )
+        y = model(x, target_size=(31, 39))
+        self.assertEqual(tuple(y.shape), (1, 1, 31, 39))
+        y.mean().backward()
+        self.assertIsNotNone(model.up2.expand[1].weight.grad)
+        self.assertGreater(float(model.up2.expand[1].weight.grad.abs().sum()), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
