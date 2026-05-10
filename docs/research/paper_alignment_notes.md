@@ -24,3 +24,18 @@ The important lesson is that a U-Net is not enough by itself. The data scale, ta
 ## Practical Takeaway
 
 Before adding ConvLSTM or other complexity, the repository needs to prove that the terrain-conditioned U-Net can fit tiny controlled samples and preserve local PRISM structure. If it cannot, larger model families will only obscure the failure.
+
+## Decoder Diagnostics Compared With Hu et al.
+
+Hu et al.'s MWR U-Net work is a stronger weather-postprocessing setting than this repository:
+
+- long reforecast history rather than a short regional sample;
+- a forecast-correction target with a different relationship to the input fields than ERA5 -> PRISM product residuals;
+- probabilistic/reliability and skill verification, including event-oriented evaluation;
+- enough data to separate model behavior from sampling noise.
+
+This repository is smaller and deterministic, so it should not claim the same kind of skill. The useful comparison is methodological: the paper treats U-Net as one part of a controlled verification system, not as a magic architecture.
+
+The current study now has one concrete, falsifiable finding in that spirit. For the stable static-bias target, the bilinear U-Net decoder keeps only `0.0693` of target power in the 4-8 km band and `0.7515` banded 4-32 km high-frequency retention, while PixelShuffle reaches `0.9480` in the same static-bias diagnostic. Skip connections reduce border RMSE on the fixed overfit sample by about `26%` and improve high-frequency retention (`0.7834` vs `0.7491`), but they do not fully solve near-grid detail loss.
+
+That is scientifically meaningful at small data scale because it is controlled and reproducible. It does not show the final downscaler is strong. It shows where the current reconstruction path loses detail and which next ablation is justified.
