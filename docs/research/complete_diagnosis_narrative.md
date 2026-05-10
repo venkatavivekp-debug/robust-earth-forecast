@@ -16,6 +16,23 @@ The upsampling comparison was the cleanest controlled check. On the same stable 
 
 Skip features were not empty. The encoder maps are spatially structured, and skip tensors retain substantial 8-32 km spectral content after z-scored comparison. They are weaker in the 4-8 km band, which is expected because the skip tensors originate on the ERA5-resolution input grid, not the PRISM grid. So the skip path helps preserve coarse spatial layout, but it cannot directly carry native 4 km PRISM detail into the decoder.
 
+## Decoder Reconstruction Bottleneck: Quantified and Addressed
+
+The near-grid-scale number is now the clearest diagnostic. With the bilinear decoder, 4-8 km retention is `0.0693` on the static-bias target. PixelShuffle raises the same static-bias 4-8 km retention to `0.5397`. On the fixed daily residual overfit sample, PixelShuffle also improves 4-8 km retention from `0.0129` to `0.0642`, lowers RMSE from `0.1875` to `0.1375`, and reduces border RMSE from `0.2090` to `0.1455`.
+
+This does not mean the problem is solved. ERA5-resolution skip features cannot carry PRISM-native 4-8 km information because ERA5 has no sub-grid atmospheric signal at that scale. The skips carry useful 8-32 km spatial structure and help preserve coarse layout, but the decoder still has to synthesize the 4 km field.
+
+The boundary context issue is separate but related. If ERA5 is downloaded exactly to the PRISM target boundary, encoder convolutions at the edge operate without real atmospheric neighbors outside the box. That degrades boundary features before the skip path sees them. A buffered ERA5 download flag has been added, but the local data were not redownloaded in this pass.
+
+PixelShuffle changed the reconstruction pathway. It did not change the input information, residual target, training split, or loss. The controlled overfit result says learned sub-pixel upsampling can reconstruct more of the learnable detail than bilinear interpolation. It does not create terrain information that ERA5/topography never contained.
+
+The honest remaining limits are unchanged:
+
+- the ERA5 sub-grid information deficit cannot be fixed by upsampling alone;
+- the `5.4%` terrain-linear residual ceiling still constrains daily predictability;
+- PixelShuffle improves learnable reconstruction detail but does not make the daily residual fully predictable;
+- extending data into seasons with stronger terrain signal remains the main path to meaningful scientific improvement.
+
 The answer to the research question is now more specific:
 
 > Fine-scale reconstruction is limited by both input information and decoder reconstruction. ERA5/topography do not determine most daily PRISM residual variance, but even for the stable learnable residual map, the current bilinear decoder suppresses near-grid detail.
