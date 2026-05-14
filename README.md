@@ -60,6 +60,28 @@ Visual examples:
 The decoder upsampling method is the primary reconstruction bottleneck at PRISM native scale (4-8 km); PixelShuffle raises 4-8 km retention from 6.9% to 53.97% in a controlled diagnostic.
 On full daily validation, the remaining data/target limit dominates RMSE.
 
+## Final Scale-Recoverability Analysis
+
+The final check asks which wavelengths are recoverable on the medium seed-42
+validation split.
+
+![Recoverability curve by wavelength](docs/images/recoverability_curve.png)
+
+| Band | U-Net bilinear corr | U-Net PixelShuffle corr | PixelShuffle retention |
+| --- | ---: | ---: | ---: |
+| >64 km | 0.904 | 0.904 | 1.026 |
+| 32-64 km | 0.830 | 0.830 | 0.859 |
+| 16-32 km | 0.815 | 0.815 | 0.843 |
+| 8-16 km | 0.832 | 0.833 | 0.865 |
+| 4-8 km | 0.109 | 0.109 | 0.019 |
+
+- broad and intermediate scales are recoverable from ERA5 + topography;
+- reconstruction collapses at 4-8 km, near PRISM native scale;
+- PixelShuffle helps controlled detail diagnostics but not full-validation RMSE;
+- the remaining limit is both decoder behavior and missing recoverable signal.
+
+See [`docs/experiments/recoverable_scale_analysis.md`](docs/experiments/recoverable_scale_analysis.md).
+
 ## Boundary-Aware Evaluation
 
 Global RMSE is reported, but it is not sufficient. Current diagnostics also track:
@@ -116,6 +138,7 @@ Core reconstruction diagnostics:
 - [`docs/experiments/training_pipeline_diagnosis.md`](docs/experiments/training_pipeline_diagnosis.md)
 - [`docs/experiments/pixelshuffle_overfit_results.md`](docs/experiments/pixelshuffle_overfit_results.md)
 - [`docs/experiments/pixelshuffle_full_training_results.md`](docs/experiments/pixelshuffle_full_training_results.md)
+- [`docs/experiments/recoverable_scale_analysis.md`](docs/experiments/recoverable_scale_analysis.md)
 
 Archived or supporting context:
 
@@ -140,6 +163,7 @@ Research framing:
 - [`docs/research/boundary_context_fix.md`](docs/research/boundary_context_fix.md)
 - [`docs/research/boundary_gradient_findings.md`](docs/research/boundary_gradient_findings.md)
 - [`docs/research/research_summary.md`](docs/research/research_summary.md)
+- [`docs/research/recoverable_scale_analysis.md`](docs/research/recoverable_scale_analysis.md)
 - [`docs/research/paper_alignment_notes.md`](docs/research/paper_alignment_notes.md)
 
 ## Reproduce
